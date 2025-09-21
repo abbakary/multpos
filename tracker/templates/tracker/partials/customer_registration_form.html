@@ -1,0 +1,624 @@
+{% load static %}
+<form id="customerRegistrationForm" method="post" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="step" id="currentStep" value="{{ step }}">
+  <input type="hidden" name="save_only" id="saveOnly" value="0">
+  <input type="hidden" id="registrationIntent" value="{{ intent }}">
+
+  <div class="wizard-step">
+    {% if step == 1 %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Full name</label>
+          {{ form.full_name }}
+          {% if form.full_name.errors %}<div class="text-danger f-12">{{ form.full_name.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Phone</label>
+          {{ form.phone }}
+          {% if form.phone.errors %}<div class="text-danger f-12">{{ form.phone.errors|striptags }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Email (optional)</label>
+          {{ form.email }}
+          {% if form.email.errors %}<div class="text-danger f-12">{{ form.email.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Customer type</label>
+          {{ form.customer_type }}
+          {% if form.customer_type.errors %}<div class="text-danger f-12">{{ form.customer_type.errors|striptags }}</div>{% endif %}
+        </div>
+
+        <div class="col-12 d-none" id="organization-field">
+          <label class="form-label">Organization name</label>
+          {{ form.organization_name }}
+          {% if form.organization_name.errors %}<div class="text-danger f-12">{{ form.organization_name.errors|striptags }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-6 d-none" id="tax-field">
+          <label class="form-label">Tax number</label>
+          {{ form.tax_number }}
+          {% if form.tax_number.errors %}<div class="text-danger f-12">{{ form.tax_number.errors|striptags }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-6 d-none" id="personal-subtype-field">
+          <label class="form-label">Personal subtype</label>
+          {{ form.personal_subtype }}
+          {% if form.personal_subtype.errors %}<div class="text-danger f-12">{{ form.personal_subtype.errors|striptags }}</div>{% endif %}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Address (optional)</label>
+          {{ form.address }}
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Notes (optional)</label>
+          {{ form.notes }}
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-4">
+        <a class="btn btn-light" href="{% url 'tracker:customers_list' %}">Cancel</a>
+        <button type="button" class="btn btn-outline-primary" id="saveCustomerBtn">Save Customer</button>
+        <button type="button" class="btn btn-primary ms-auto" id="nextStepBtn">Next</button>
+      </div>
+
+    {% elif step == 2 %}
+      <div class="row">
+        <div class="col-12 mb-3">
+          <h6 class="mb-2">What brings the customer today?</h6>
+        </div>
+        <div class="col-md-4">
+          <div class="card intent-card p-3 cursor-pointer" onclick="selectIntent('service')">
+            <div class="card-body">
+              <h6>Service</h6>
+              <p class="mb-0 small text-muted">I need a service</p>
+              <input type="radio" name="intent" value="service" class="d-none" {% if step2.intent == 'service' %}checked{% endif %}>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card intent-card p-3 cursor-pointer" onclick="selectIntent('sales')">
+            <div class="card-body">
+              <h6>Purchase</h6>
+              <p class="mb-0 small text-muted">I want to buy something</p>
+              <input type="radio" name="intent" value="sales" class="d-none" {% if step2.intent == 'sales' %}checked{% endif %}>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card intent-card p-3 cursor-pointer" onclick="selectIntent('inquiry')">
+            <div class="card-body">
+              <h6>Inquiry</h6>
+              <p class="mb-0 small text-muted">Just an inquiry</p>
+              <input type="radio" name="intent" value="inquiry" class="d-none" {% if step2.intent == 'inquiry' %}checked{% endif %}>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-4">
+        <button type="button" class="btn btn-light" id="backFromStep2">Back</button>
+        <button type="button" class="btn btn-primary ms-auto" id="nextStep2">Next</button>
+      </div>
+
+    {% elif step == 3 %}
+      {# Intent-specific detailed form: service, sales, or inquiry #}
+      <input type="hidden" name="service_type" id="id_service_type" value="{% if intent == 'sales' %}tire_sales{% elif intent == 'service' %}car_service{% else %}{{ step3.service_type }}{% endif %}">
+      {% if intent == 'service' %}
+        <div class="row">
+          <div class="col-12 mb-3"><h6 class="mb-2">Service Offered</h6></div>
+
+          {% for svc in service_offers %}
+            <div class="col-md-4 mb-3">
+              <input type="checkbox" id="svc_{{ forloop.counter }}" name="service_selection" value="{{ svc }}" class="visually-hidden">
+              <label for="svc_{{ forloop.counter }}" class="card service-offer p-3 cursor-pointer w-100" style="border:1px solid #e9ecef;">
+                <div class="d-block">{{ svc }}</div>
+              </label>
+            </div>
+          {% endfor %}
+
+          <div class="col-12 mt-3">
+            <div class="card p-3 border">
+              <div class="card-header bg-secondary text-white"><strong>Vehicle Information (optional)</strong></div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-3">
+                    <label class="form-label">Plate Number</label>
+                    <input name="plate_number" id="id_plate_number" class="form-control" placeholder="e.g., T123ABC">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Make</label>
+                    <input name="make" id="id_make" class="form-control" placeholder="e.g., Toyota">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Model</label>
+                    <input name="model" id="id_model" class="form-control" placeholder="e.g., Corolla">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Vehicle Type</label>
+                    <select name="vehicle_type" id="id_vehicle_type" class="form-select">
+                      <option value="">Select type</option>
+                      <option value="sedan">Sedan</option>
+                      <option value="suv">SUV</option>
+                      <option value="truck">Truck</option>
+                      <option value="motorcycle">Motorcycle</option>
+                      <option value="bus">Bus</option>
+                      <option value="van">Van</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row g-3 mt-3">
+                  <div class="col-md-8">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-control" placeholder="Describe the issue or service needed"></textarea>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Estimated duration (mins)</label>
+                    <input name="estimated_duration" class="form-control" value="50">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="button" class="btn btn-light" id="backFromStep3">Back</button>
+          <button type="button" class="btn btn-primary ms-auto" id="nextServiceBtn">Next</button>
+        </div>
+
+      {% elif intent == 'sales' %}
+        <div class="row">
+          <div class="col-12 mb-3"><h6 class="mb-2">Tire Service Add-ons</h6></div>
+          <div class="col-md-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="oc_ts_install" name="tire_services" value="install">
+              <label class="form-check-label" for="oc_ts_install">Install Tires</label>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="oc_ts_balance" name="tire_services" value="balancing">
+              <label class="form-check-label" for="oc_ts_balance">Wheel Balancing</label>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="oc_ts_align" name="tire_services" value="alignment">
+              <label class="form-check-label" for="oc_ts_align">Wheel Alignment</label>
+            </div>
+          </div>
+          <div class="col-md-3 mb-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="oc_ts_dispose" name="tire_services" value="disposal">
+              <label class="form-check-label" for="oc_ts_dispose">Old Tire Disposal</label>
+            </div>
+          </div>
+
+          <div class="col-6 mt-3">
+            <label class="form-label">Item name</label>
+            <select name="item_name" id="id_item_name" class="form-select" data-brands='{{ item_brands_json|escapejs }}'>
+              <option value="">Select item</option>
+              {% for itname in item_names %}
+                <option value="{{ itname }}">{{ itname }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 mt-3">
+            <label class="form-label">Brand</label>
+            <select name="brand" id="id_brand" class="form-select">
+              <option value="">Select brand</option>
+              {% for b in brands %}
+                <option value="{{ b.name }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-4 mt-3">
+            <label class="form-label">Quantity</label>
+            <input name="quantity" class="form-control">
+          </div>
+          <div class="col-md-4 mt-3">
+            <label class="form-label">Tire type</label>
+            <select name="tire_type" class="form-select">
+              <option value="">Select condition</option>
+              <option value="New">New</option>
+              <option value="Used">Used</option>
+              <option value="Refurbished">Refurbished</option>
+            </select>
+          </div>
+
+        </div>
+        <script>
+          (function(){
+            // Mirror order_create auto brand selection for Step 3 (sales)
+            try {
+              var itemEl = document.getElementById('id_item_name');
+              var brandEl = document.getElementById('id_brand');
+              if (!itemEl || !brandEl) return;
+              var mapping = {};
+              try { mapping = JSON.parse(itemEl.getAttribute('data-brands') || '{}'); } catch(e) { mapping = {}; }
+              function onItemChange(){
+                var bn = mapping[this.value];
+                if (!bn) return;
+                for (var i = 0; i < brandEl.options.length; i++) {
+                  if (brandEl.options[i].text === bn || brandEl.options[i].value === bn) {
+                    brandEl.selectedIndex = i;
+                    break;
+                  }
+                }
+              }
+              itemEl.addEventListener('change', onItemChange);
+              if (itemEl.value) { onItemChange.call(itemEl); }
+            } catch(e) { /* noop */ }
+          })();
+        </script>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="button" class="btn btn-light" id="backFromStep3">Back</button>
+          <button type="button" class="btn btn-primary ms-auto" id="nextServiceBtn">Next</button>
+        </div>
+
+      {% else %}
+        <div class="row">
+          <div class="col-12 mb-3"><h6 class="mb-2">Inquiry / Consultation</h6></div>
+          <div class="col-md-4">
+            <label class="form-label">{{ order_form.type.label|default:'Type' }}</label>
+            {{ order_form.type }}
+            <input type="hidden" name="type" value="{{ order_form.initial.type|default:'consultation' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">{{ order_form.priority.label|default:'Priority' }}</label>
+            {{ order_form.priority }}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">{{ order_form.vehicle.label|default:'Vehicle' }}</label>
+            {{ order_form.vehicle }}
+            <div class="small text-muted">Or fill vehicle info below for new vehicles.</div>
+          </div>
+
+          <div class="col-md-6 mt-3">
+            <label class="form-label">{{ order_form.inquiry_type.label|default:'Inquiry type' }}</label>
+            {{ order_form.inquiry_type }}
+          </div>
+          <div class="col-md-6 mt-3">
+            <label class="form-label">{{ order_form.contact_preference.label|default:'Contact preference' }}</label>
+            {{ order_form.contact_preference }}
+          </div>
+
+          <div class="col-12 mt-3">
+            <label class="form-label">{{ order_form.questions.label|default:'Questions' }}</label>
+            {{ order_form.questions }}
+          </div>
+        </div>
+        <script>
+          (function(){
+            try{
+              var sel = document.getElementById('{{ order_form.type.id_for_label }}') || document.querySelector('[name="{{ order_form.type.html_name }}"]');
+              if (sel) sel.setAttribute('disabled','disabled');
+            }catch(e){}
+          })();
+        </script>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="button" class="btn btn-light" id="backFromStep3">Back</button>
+          <button type="button" class="btn btn-primary ms-auto" id="nextServiceBtn">Next</button>
+        </div>
+      {% endif %}
+
+    {% else %}
+      {# Step 4: Summary and Order creation #}
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">Customer summary</h6>
+            </div>
+            <div class="card-body">
+              <p><strong>Name:</strong> {{ step1.full_name }}</p>
+              <p><strong>Phone:</strong> {{ step1.phone }}</p>
+              <p><strong>Email:</strong> {{ step1.email }}</p>
+              <p><strong>Type:</strong> {{ step1.customer_type }}</p>
+              <p><strong>Notes:</strong> {{ step1.notes }}</p>
+            </div>
+          </div>
+
+          {# Intent-specific summary from Step 3 #}
+          {% if intent == 'sales' %}
+          <div class="card mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">Purchase Summary</h6>
+              <span class="badge bg-warning text-dark">Sales</span>
+            </div>
+            <div class="card-body">
+              <p class="mb-1"><strong>Item:</strong> {{ step3.item_name|default:"-" }}</p>
+              <p class="mb-1"><strong>Brand:</strong> {{ step3.brand|default:"-" }}</p>
+              <p class="mb-1"><strong>Quantity:</strong> {{ step3.quantity|default:"-" }}</p>
+              <p class="mb-1"><strong>Tire type:</strong> {{ step3.tire_type|default:"-" }}</p>
+              {% if step3.tire_services %}
+                <p class="mb-0"><strong>Add-ons:</strong> {{ step3.tire_services|join:", " }}</p>
+              {% endif %}
+            </div>
+          </div>
+          {% elif intent == 'service' %}
+          <div class="card mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">Service Summary</h6>
+              <span class="badge bg-success">Service</span>
+            </div>
+            <div class="card-body">
+              {% if step3.service_selection %}
+                <ul class="mb-0">
+                  {% for s in step3.service_selection %}
+                    <li>{{ s }}</li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="mb-0 text-muted">No services selected.</p>
+              {% endif %}
+            </div>
+          </div>
+          {% elif intent == 'inquiry' %}
+          <div class="card mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">Inquiry Summary</h6>
+              <span class="badge bg-info text-dark">Inquiry</span>
+            </div>
+            <div class="card-body">
+              <p class="mb-0 text-muted">Proceed to create a consultation order.</p>
+            </div>
+          </div>
+          {% endif %}
+
+          {# Show vehicle card only for Inquiry; Service vehicle fields are inside the order section #}
+          {% if intent == 'inquiry' %}
+          <div class="card mb-3" id="vehicleCardStep4">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">Vehicle (if applicable)</h6>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Plate number</label>
+                  <input name="plate_number" id="id_plate_number" class="form-control" placeholder="e.g., T123ABC">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Make</label>
+                  <input name="make" id="id_make" class="form-control" placeholder="e.g., Toyota">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Model</label>
+                  <input name="model" id="id_model" class="form-control" placeholder="e.g., Corolla">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Vehicle type</label>
+                  <select name="vehicle_type" id="id_vehicle_type" class="form-select">
+                    <option value="">Select type</option>
+                    <option value="sedan">Sedan</option>
+                    <option value="suv">SUV</option>
+                    <option value="truck">Truck</option>
+                    <option value="motorcycle">Motorcycle</option>
+                    <option value="bus">Bus</option>
+                    <option value="van">Van</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">{% if intent == 'inquiry' %}Order Details{% else %}Order Summary{% endif %}</h6>
+            </div>
+            <div class="card-body">
+              {% with t=order_form.initial.type %}
+                {% if intent == 'inquiry' %}
+                  <div class="mb-3">
+                    <label class="form-label d-block">Order type</label>
+                    <span class="badge bg-info text-dark">Inquiries</span>
+                    <input type="hidden" name="type" value="consultation">
+                  </div>
+
+                  <ul class="list-unstyled mb-0">
+                    <li class="mb-1"><strong>Priority:</strong> {{ step3.priority|default:"-" }}</li>
+                    <li class="mb-1"><strong>Vehicle:</strong> {{ step3.vehicle|default:"-" }}</li>
+                    <li class="mb-1"><strong>Inquiry type:</strong> {{ step3.inquiry_type|default:"-" }}</li>
+                    <li class="mb-1"><strong>Contact preference:</strong> {{ step3.contact_preference|default:"-" }}</li>
+                    <li class="mb-1"><strong>Questions:</strong> {{ step3.questions|default:"-" }}</li>
+                  </ul>
+
+                  {# Hidden inputs to submit values #}
+                  <input type="hidden" name="priority" value="{{ step3.priority }}">
+                  <input type="hidden" name="vehicle" value="{{ step3.vehicle }}">
+                  <input type="hidden" name="inquiry_type" value="{{ step3.inquiry_type }}">
+                  <input type="hidden" name="contact_preference" value="{{ step3.contact_preference }}">
+                  <input type="hidden" name="questions" value="{{ step3.questions }}">
+                {% else %}
+                  <div class="mb-3">
+                    <label class="form-label d-block">Order type</label>
+                    {% if t == 'sales' %}<span class="badge bg-warning text-dark">Sales</span>{% endif %}
+                    {% if t == 'service' %}<span class="badge bg-success">Service</span>{% endif %}
+                    {% if t == 'consultation' %}<span class="badge bg-info text-dark">Consultation</span>{% endif %}
+                    <input type="hidden" name="type" value="{{ t }}">
+                  </div>
+
+                  {# Read-only summary reflecting data selected in Step 3 #}
+                  {% if intent == 'sales' %}
+                    <ul class="list-unstyled mb-0">
+                      <li class="mb-1"><strong>Item:</strong> {{ step3.item_name|default:"-" }}</li>
+                      <li class="mb-1"><strong>Brand:</strong> {{ step3.brand|default:"-" }}</li>
+                      <li class="mb-1"><strong>Quantity:</strong> {{ step3.quantity|default:"-" }}</li>
+                      <li class="mb-1"><strong>Tire type:</strong> {{ step3.tire_type|default:"-" }}</li>
+                      {% if step3.tire_services %}
+                        <li class="mb-0"><strong>Add-ons:</strong> {{ step3.tire_services|join:", " }}</li>
+                      {% endif %}
+                    </ul>
+                    {# Hidden inputs to submit values #}
+                    <input type="hidden" name="item_name" value="{{ step3.item_name }}">
+                    <input type="hidden" name="brand" value="{{ step3.brand }}">
+                    <input type="hidden" name="quantity" value="{{ step3.quantity }}">
+                    <input type="hidden" name="tire_type" value="{{ step3.tire_type }}">
+                    {% if step3.tire_services %}
+                      {% for ts in step3.tire_services %}
+                        <input type="hidden" name="tire_services" value="{{ ts }}">
+                      {% endfor %}
+                    {% endif %}
+                  {% elif intent == 'service' %}
+                    {% if step3.service_selection %}
+                      <ul class="mb-2">
+                        {% for s in step3.service_selection %}
+                          <li>{{ s }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <p class="mb-2 text-muted">No services selected.</p>
+                    {% endif %}
+                    {% if step3.plate_number or step3.make or step3.model or step3.vehicle_type %}
+                      <div class="small text-muted">
+                        <div><strong>Vehicle:</strong> {{ step3.plate_number|default:"-" }} {{ step3.make|default:"" }} {{ step3.model|default:"" }} ({{ step3.vehicle_type|default:"-" }})</div>
+                      </div>
+                    {% endif %}
+                    {# Hidden inputs to submit values #}
+                    {% if step3.service_selection %}
+                      {% for s in step3.service_selection %}
+                        <input type="hidden" name="service_selection" value="{{ s }}">
+                      {% endfor %}
+                    {% endif %}
+                    <input type="hidden" name="plate_number" value="{{ step3.plate_number }}">
+                    <input type="hidden" name="make" value="{{ step3.make }}">
+                    <input type="hidden" name="model" value="{{ step3.model }}">
+                    <input type="hidden" name="vehicle_type" value="{{ step3.vehicle_type }}">
+                    <input type="hidden" name="description" value="{{ step3.description }}">
+                    <input type="hidden" name="estimated_duration" value="{{ step3.estimated_duration }}">
+                  {% endif %}
+
+                  <hr>
+                  <p class="mb-0 text-muted">Review the summary on the left. No additional selections are required.</p>
+                {% endif %}
+              {% endwith %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="button" class="btn btn-light" id="backFromStep4">Back</button>
+        <button type="submit" class="btn btn-success ms-auto">Create Customer & Order</button>
+      </div>
+
+    {% endif %}
+  </div>
+</form>
+
+<script>
+  // Inline small helpers to maintain progressive enhancement when JS file not loaded
+  document.addEventListener('DOMContentLoaded', function(){
+    // Toggle conditional Customer fields in Step 1
+    var customerType = document.getElementById('id_customer_type');
+    function toggleCustomerFields(){
+      if(!customerType) return;
+      var val = customerType.value;
+      var ps = document.getElementById('personal-subtype-field');
+      var org = document.getElementById('organization-field');
+      var tax = document.getElementById('tax-field');
+      if(ps) { ps.classList.toggle('d-none', val !== 'personal'); }
+      if(org) { org.classList.toggle('d-none', ['company','government','ngo'].indexOf(val) === -1); }
+      if(tax) { tax.classList.toggle('d-none', ['company','government','ngo'].indexOf(val) === -1); }
+    }
+    if(customerType){ customerType.addEventListener('change', toggleCustomerFields); toggleCustomerFields(); }
+
+    // Wire quick save button if present
+    var saveBtn = document.getElementById('saveCustomerBtn');
+    if(saveBtn){
+      saveBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        // If AJAX handler is present, let it handle submission
+        if(window.__CUSTOMER_REG_AJAX){ return; }
+        var saveOnly = document.getElementById('saveOnly');
+        if(saveOnly) saveOnly.value = '1';
+        var form = document.getElementById('customerRegistrationForm');
+        // Submit normally to allow server-side redirect when JS not available
+        form.submit();
+      });
+    }
+
+    // Step 2: Intent selection helper (service/sales/inquiry)
+    window.selectIntent = function(val){
+      try {
+        var intentInput = document.getElementById('registrationIntent');
+        if (intentInput) intentInput.value = val;
+        var radios = document.querySelectorAll('input[name="intent"]');
+        radios.forEach(function(r){ r.checked = (r.value === val); });
+        // Visual selection for cards
+        document.querySelectorAll('.intent-card').forEach(function(card){ card.classList.remove('border-primary'); });
+        var activeCard = document.querySelector('.intent-card input[value="'+val+'"]');
+        if (activeCard && activeCard.closest('.intent-card')) {
+          activeCard.closest('.intent-card').classList.add('border-primary');
+        }
+      } catch(e) { /* noop */ }
+    };
+
+    // Step 3: Toggle service offer checkboxes (inputs are hidden)
+    try {
+      document.querySelectorAll('.service-offer').forEach(function(lbl){
+        lbl.addEventListener('click', function(e){
+          var cb = lbl.querySelector('input[type="checkbox"][name="service_selection"]');
+          if (!cb) return;
+          cb.checked = !cb.checked;
+          lbl.classList.toggle('border-primary', cb.checked);
+          lbl.classList.toggle('bg-light', cb.checked);
+        });
+      });
+    } catch(e) { /* noop */ }
+
+    // Step 4: Toggle order sections by order type (service/sales/consultation)
+    try {
+      // We render a hidden input named 'type' in Step 4
+      var typeEl = document.querySelector('input[name="type"]');
+      function updateSections(){
+        var t = (typeEl && typeEl.value) || '';
+        var svc = document.getElementById('section-service');
+        var sal = document.getElementById('section-sales');
+        var con = document.getElementById('section-consultation');
+        if (svc) svc.style.display = (t==='service') ? 'block' : 'none';
+        if (sal) sal.style.display = (t==='sales') ? 'block' : 'none';
+        if (con) con.style.display = (t==='consultation') ? 'block' : 'none';
+        // Hide vehicle card when type is sales
+        var veh = document.getElementById('vehicleCardStep4');
+        if (veh) veh.style.display = (t==='sales') ? 'none' : '';
+      }
+      updateSections();
+    } catch (e) { /* noop */ }
+
+    // Auto-select brand when item changes (sales intent)
+    try {
+      var itemEl = document.getElementById('id_item_name');
+      var brandEl = document.getElementById('id_brand');
+      if (itemEl && brandEl) {
+        var mapping = {};
+        try {
+          var attr = itemEl.getAttribute('data-brands');
+          mapping = JSON.parse(attr && attr.trim() ? attr : '{{ item_brands_json|escapejs }}');
+        } catch(e) { mapping = {}; }
+        itemEl.addEventListener('change', function(){
+          var bn = mapping[this.value];
+          if (!bn) return;
+          for (var i = 0; i < brandEl.options.length; i++) {
+            if (brandEl.options[i].text === bn || brandEl.options[i].value === bn) {
+              brandEl.selectedIndex = i;
+              break;
+            }
+          }
+        });
+      }
+    } catch (e) { /* noop */ }
+  });
+</script>
