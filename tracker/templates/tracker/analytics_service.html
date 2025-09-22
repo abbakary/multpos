@@ -1,0 +1,96 @@
+{% extends 'tracker/base.html' %}
+{% load static %}
+{% block title %}Service Analytics{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-6"><h4>Service Analytics</h4></div>
+      <div class="col-6">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'tracker:dashboard' %}"><svg class="stroke-icon"><use href="../assets/svg/icon-sprite.svg#stroke-home"></use></svg></a></li>
+          <li class="breadcrumb-item active">Analytics</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body">
+      <h6 class="mb-1">Total Orders</h6><h3 class="f-w-600 mb-0">{{ kpis.total_orders|default:0 }}</h3>
+      <p class="mb-0 text-muted">{{ f_from }} → {{ f_to }}</p>
+    </div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body">
+      <h6 class="mb-1">Tire Sales</h6><h3 class="f-w-600 mb-0">{{ kpis.total_tire_sales|default:0 }}</h3>
+      <p class="mb-0 text-muted">{{ kpis.tire_sales_change|default:0 }}% vs prev</p>
+    </div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body">
+      <h6 class="mb-1">Car Service</h6><h3 class="f-w-600 mb-0">{{ kpis.total_car_service|default:0 }}</h3>
+      <p class="mb-0 text-muted">{{ kpis.car_service_change|default:0 }}% vs prev</p>
+    </div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body">
+      <h6 class="mb-1">Inquiries</h6><h3 class="f-w-600 mb-0">{{ kpis.total_inquiries|default:0 }}</h3>
+      <p class="mb-0 text-muted">{{ kpis.inquiry_change|default:0 }}% vs prev</p>
+    </div></div></div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-xxl-6 col-md-6">
+      <div class="card h-100"><div class="card-header"><h5>Status by Application</h5></div>
+        <div class="card-body"><canvas id="statusStacked" width="520" height="300"></canvas></div>
+      </div>
+    </div>
+    <div class="col-xxl-6 col-md-6">
+      <div class="card h-100"><div class="card-header"><h5>Types</h5></div>
+        <div class="card-body"><canvas id="typesPie" width="520" height="300"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card h-100"><div class="card-header"><h5>Daily Trend</h5></div>
+        <div class="card-body"><canvas id="trendMulti" width="1100" height="320"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-xxl-4 col-md-6">
+      <div class="card h-100"><div class="card-header"><h5>Top Brands</h5></div>
+        <div class="card-body"><canvas id="topBrands" width="520" height="300"></canvas></div>
+      </div>
+    </div>
+    <div class="col-xxl-4 col-md-6">
+      <div class="card h-100"><div class="card-header"><h5>Tire Types</h5></div>
+        <div class="card-body"><canvas id="tireTypes" width="520" height="300"></canvas></div>
+      </div>
+    </div>
+    <div class="col-xxl-4 col-12">
+      <div class="card h-100"><div class="card-header"><h5>Inquiry Types</h5></div>
+        <div class="card-body"><canvas id="inquiryTypes" width="520" height="300"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var charts = JSON.parse({{ charts_json|safe|default:'{}'|escapejs }});
+  function pie(cv, lbls, vals, colors){ var ctx=cv.getContext('2d'); var t=vals.reduce(function(a,b){return a+b;},0)||1; var cx=cv.width/2, cy=cv.height/2, r=Math.min(cx,cy)-10, a=-Math.PI/2; for(var i=0;i<vals.length;i++){ var s=(vals[i]/t)*Math.PI*2; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a,a+s); ctx.closePath(); ctx.fillStyle=colors[i%colors.length]; ctx.fill(); a+=s; } }
+  function barsStacked(cv, apps, series, colors){ var ctx=cv.getContext('2d'), w=cv.width, h=cv.height, p=40, bw= (w-2*p)/series[0].data.length * 0.6; ctx.clearRect(0,0,w,h); var totals=[]; for(var i=0;i<series[0].data.length;i++){ totals[i]=0; for(var s=0;s<series.length;s++){ totals[i]+=series[s].data[i]; } } var max=Math.max.apply(null, totals.concat([1])); for(var i=0;i<series[0].data.length;i++){ var x=p + (w-2*p)*(i/(series[0].data.length)); var y=h-p; var acc=0; for(var s=0;s<series.length;s++){ var val=series[s].data[i]; var barH=(h-2*p)*(val/max); ctx.fillStyle=colors[s%colors.length]; ctx.fillRect(x - bw/2, y - acc - barH, bw, barH); acc += barH; } } }
+  function lineMulti(cv, labels, series, colors){ var ctx=cv.getContext('2d'), w=cv.width, h=cv.height, p=30; var all=[]; series.forEach(function(s){ all=all.concat(s.values); }); var max=Math.max.apply(null, all.concat([1])); ctx.clearRect(0,0,w,h); ctx.strokeStyle='#e5e7eb'; for(var i=0;i<5;i++){ var y=p+(h-2*p)*i/4; ctx.beginPath(); ctx.moveTo(p,y); ctx.lineTo(w-p,y); ctx.stroke(); }
+    series.forEach(function(s, idx){ ctx.beginPath(); ctx.strokeStyle=colors[idx%colors.length]; ctx.lineWidth=2; s.values.forEach(function(v,i){ var x=p+(w-2*p)*(i/Math.max(labels.length-1,1)); var y=h-p-(h-2*p)*(v/max); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke(); }); }
+  function bars(cv, labels, values, color){ var ctx=cv.getContext('2d'), w=cv.width, h=cv.height, p=40; var bw=(w-2*p)/Math.max(labels.length,1)*0.6; var max=Math.max.apply(null, values.concat([1])); for(var i=0;i<labels.length;i++){ var x=p + (w-2*p)*(i/Math.max(labels.length-1,1)); var barH=(h-2*p)*(values[i]/max); ctx.fillStyle=color; ctx.fillRect(x-bw/2, h-p-barH, bw, barH); } }
+  document.addEventListener('DOMContentLoaded', function(){
+    if(charts.status_by_app){ barsStacked(document.getElementById('statusStacked'), charts.status_by_app.apps, charts.status_by_app.series, ['#60a5fa','#f59e0b','#22c55e']); }
+    if(charts.types){ pie(document.getElementById('typesPie'), charts.types.labels, charts.types.values, ['#4e79a7','#59a14f','#f28e2b']); }
+    if(charts.trend_multi){ lineMulti(document.getElementById('trendMulti'), charts.trend_multi.labels, charts.trend_multi.series, ['#2563eb','#16a34a','#f59e0b']); }
+    if(charts.top_brands){ bars(document.getElementById('topBrands'), charts.top_brands.labels, charts.top_brands.values, '#2563eb'); }
+    if(charts.tire_types){ pie(document.getElementById('tireTypes'), charts.tire_types.labels, charts.tire_types.values, ['#34d399','#fbbf24','#f87171','#94a3b8']); }
+    if(charts.inquiry_types){ bars(document.getElementById('inquiryTypes'), charts.inquiry_types.labels, charts.inquiry_types.values, '#10b981'); }
+  });
+})();
+</script>
+{% endblock %}

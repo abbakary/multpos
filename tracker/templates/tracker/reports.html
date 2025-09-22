@@ -1,0 +1,83 @@
+{% extends 'tracker/base.html' %}
+{% load static %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="page-title">
+    <div class="row">
+      <div class="col-6"><h4>Reports</h4></div>
+      <div class="col-6">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="{% url 'tracker:dashboard' %}"><svg class="stroke-icon"><use href="../assets/svg/icon-sprite.svg#stroke-home"></use></svg></a></li>
+          <li class="breadcrumb-item active">Reports</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body"><h6 class="mb-1">Total</h6><h3 class="f-w-600 mb-0">{{ stats.total|default:0 }}</h3></div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body"><h6 class="mb-1">Completed</h6><h3 class="f-w-600 mb-0">{{ stats.completed|default:0 }}</h3></div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body"><h6 class="mb-1">In Progress</h6><h3 class="f-w-600 mb-0">{{ stats.in_progress|default:0 }}</h3></div></div></div>
+    <div class="col-xxl-3 col-sm-6"><div class="card h-100"><div class="card-body"><h6 class="mb-1">Cancelled</h6><h3 class="f-w-600 mb-0">{{ stats.cancelled|default:0 }}</h3></div></div></div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-xxl-4 col-md-6"><div class="card h-100"><div class="card-header"><h5>Status</h5></div><div class="card-body"><canvas id="statusPie" width="420" height="260"></canvas></div></div></div>
+    <div class="col-xxl-4 col-md-6"><div class="card h-100"><div class="card-header"><h5>Type</h5></div><div class="card-body"><canvas id="typePie" width="420" height="260"></canvas></div></div></div>
+    <div class="col-xxl-4 col-12"><div class="card h-100"><div class="card-header"><h5>Trend</h5></div><div class="card-body"><canvas id="trendLine" width="520" height="260"></canvas></div></div></div>
+  </div>
+
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card h-100">
+        <div class="card-header card-no-border"><h5>Orders</h5>
+          <div class="ms-auto"><a class="btn btn-outline-primary btn-sm" href="{% url 'tracker:reports_export' %}?from={{ export_from }}&to={{ export_to }}">Export CSV</a></div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive custom-scrollbar" style="max-height: 500px;">
+            <table class="table table-hover table-borderless">
+              <thead class="bg-light">
+                <tr>
+                  <th class="ps-4">Order</th>
+                  <th>Customer</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for o in orders %}
+                <tr class="border-bottom">
+                  <td class="ps-4 fw-600"><a href="{% url 'tracker:order_detail' o.id %}">#{{ o.order_number }}</a></td>
+                  <td>{{ o.customer.full_name }}</td>
+                  <td>{{ o.get_type_display }}</td>
+                  <td>{{ o.get_status_display }}</td>
+                  <td>{{ o.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4 text-muted">No orders</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+  var charts = JSON.parse({{ charts_json|safe|default:'{}'|escapejs }});
+  function pie(cv, lbls, vals, colors){ var ctx=cv.getContext('2d'); var t=vals.reduce(function(a,b){return a+b;},0)||1; var cx=cv.width/2, cy=cv.height/2, r=Math.min(cx,cy)-10, a=-Math.PI/2; for(var i=0;i<vals.length;i++){ var s=(vals[i]/t)*Math.PI*2; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a,a+s); ctx.closePath(); ctx.fillStyle=colors[i%colors.length]; ctx.fill(); a+=s; } }
+  function line(cv, labels, values, color){ var ctx=cv.getContext('2d'), w=cv.width, h=cv.height, p=30; var max=Math.max.apply(null, values.concat([1])); ctx.clearRect(0,0,w,h); ctx.strokeStyle='#e5e7eb'; for(var i=0;i<5;i++){ var y=p+(h-2*p)*i/4; ctx.beginPath(); ctx.moveTo(p,y); ctx.lineTo(w-p,y); ctx.stroke(); } ctx.beginPath(); ctx.strokeStyle=color||'#2563eb'; ctx.lineWidth=2; values.forEach(function(v,i){ var x=p+(w-2*p)*(i/Math.max(labels.length-1,1)); var y=h-p-(h-2*p)*(v/max); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke(); }
+  document.addEventListener('DOMContentLoaded', function(){
+    if(charts.status){ pie(document.getElementById('statusPie'), charts.status.labels, charts.status.values, ['#60a5fa','#f59e0b','#22c55e','#94a3b8']); }
+    if(charts.type){ pie(document.getElementById('typePie'), charts.type.labels, charts.type.values, ['#4e79a7','#59a14f','#f28e2b']); }
+    if(charts.trend){ line(document.getElementById('trendLine'), charts.trend.labels, charts.trend.values, '#0ea5e9'); }
+  });
+})();
+</script>
+{% endblock %}

@@ -96,7 +96,7 @@
                         </div>
                         <div class="ms-3">
                             <h6 class="mb-1">In Progress</h6>
-                            <h3 class="f-w-600 mb-0">{{ status_counts.in_progress|add:status_counts.cancelled|default:0 }}</h3>
+                            <h3 class="f-w-600 mb-0">{{ status_counts.in_progress|default:0 }}</h3>
                             <p class="mb-0 text-muted">active orders</p>
                         </div>
                     </div>
@@ -114,7 +114,7 @@
                     <h5>Service Distribution</h5>
                 </div>
                 <div class="card-body">
-                    <div id="serviceDistributionChart"></div>
+                    <div id="serviceDistributionChart"><canvas class="chart-canvas" id="serviceDistributionCanvas" width="400" height="240" aria-label="Service Distribution" role="img"></canvas></div>
                     <div class="text-center mt-3">
                         <a href="{% url 'tracker:analytics_service' %}" class="btn btn-sm btn-outline-primary">View Details</a>
                     </div>
@@ -129,7 +129,7 @@
                     <h5>Order Status</h5>
                 </div>
                 <div class="card-body">
-                    <div id="orderStatusChart"></div>
+                    <div id="orderStatusChart"><canvas class="chart-canvas" id="orderStatusCanvas" width="400" height="240" aria-label="Order Status" role="img"></canvas></div>
                     <div class="mt-3">
                         <div class="progress-container">
                             <div class="progress-label">
@@ -351,13 +351,74 @@
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize progress bars
-    document.querySelectorAll('.progress-bar[data-width]').forEach(function(bar) {
-        const width = bar.dataset.width;
-        bar.style.width = width + '%';
-        bar.setAttribute('aria-valuenow', width);
+(function(){
+  function drawPie(canvas, data, colors) {
+    var ctx = canvas.getContext('2d');
+    var total = data.values.reduce(function(a,b){return a+b;},0) || 1;
+    var cx = canvas.width/2, cy = canvas.height/2, r = Math.min(cx, cy) - 10;
+    var start = -Math.PI/2;
+    for (var i=0;i<data.values.length;i++){
+      var slice = (data.values[i]/total) * Math.PI*2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,start,start+slice);
+      ctx.closePath();
+      ctx.fillStyle = colors[i%colors.length];
+      ctx.fill();
+      start += slice;
+    }
+  }
+  function drawDonut(canvas, data, colors) {
+    drawPie(canvas, data, colors);
+    var ctx = canvas.getContext('2d');
+    var cx = canvas.width/2, cy = canvas.height/2, r = Math.min(cx, cy) - 10;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*0.55, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    // Progress bars init (existing)
+    document.querySelectorAll('.progress-bar[data-width]').forEach(function(bar){
+      var width = bar.dataset.width;
+      bar.style.width = width + '%';
+      bar.setAttribute('aria-valuenow', width);
     });
-});
+    // Service distribution pie from type_counts
+    try{
+      var svcCanvas = document.getElementById('serviceDistributionCanvas');
+      if (svcCanvas) {
+        var data = {
+          labels: ['Sales','Service','Consultation'],
+          values: [
+            {{ type_counts.sales|default:0 }},
+            {{ type_counts.service|default:0 }},
+            {{ type_counts.consultation|default:0 }}
+          ]
+        };
+        var colors = ['#4e79a7','#59a14f','#f28e2b'];
+        drawPie(svcCanvas, data, colors);
+      }
+    }catch(e){}
+    // Order status donut from status_counts
+    try{
+      var statusCanvas = document.getElementById('orderStatusCanvas');
+      if (statusCanvas) {
+        var data2 = {
+          labels: ['Created','In Progress','Completed','Cancelled'],
+          values: [
+            {{ status_counts.created|default:0 }},
+            {{ status_counts.in_progress|default:0 }},
+            {{ status_counts.completed|default:0 }},
+            {{ status_counts.cancelled|default:0 }}
+          ]
+        };
+        var colors2 = ['#60a5fa','#f59e0b','#22c55e','#94a3b8'];
+        drawDonut(statusCanvas, data2, colors2);
+      }
+    }catch(e){}
+  });
+})();
 </script>
 {% endblock %}
