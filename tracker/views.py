@@ -1958,15 +1958,21 @@ def orders_list(request: HttpRequest):
         orders = orders.filter(priority=priority)
     if customer_id:
         orders = orders.filter(customer_id=customer_id)
-    if date_range == "today":
+    # Period filters: daily/weekly/monthly/yearly (aliases: today/week/month/year)
+    dr = (date_range or '').lower()
+    if dr in ("daily", "today"):
         today = timezone.localdate()
         orders = orders.filter(created_at__date=today)
-    elif date_range == "week":
+    elif dr in ("weekly", "week"):
         week_ago = timezone.now() - timedelta(days=7)
         orders = orders.filter(created_at__gte=week_ago)
-    elif date_range == "month":
+    elif dr in ("monthly", "month"):
         month_ago = timezone.now() - timedelta(days=30)
         orders = orders.filter(created_at__gte=month_ago)
+    elif dr in ("yearly", "year"):
+        now = timezone.now()
+        start_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        orders = orders.filter(created_at__gte=start_year)
 
     # Get counts for stats
     total_orders = Order.objects.count()
