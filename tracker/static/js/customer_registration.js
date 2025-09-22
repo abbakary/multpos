@@ -148,7 +148,35 @@
 
     // Next from step3
     var next3 = document.getElementById('nextServiceBtn');
-    if(next3){ next3.addEventListener('click', function(e){ e.preventDefault(); ajaxPostForm(form, function(data){ try{ if(data && data.form_html && (!data.success)){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } if(data && data.form_html && data.success){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } var cur = parseInt((document.getElementById('currentStep')||{value:3}).value||3,10); var next = Math.min(cur+1,4); loadStep(next); }catch(err){ console.error('Error handling step3 response', err); } }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); }); }
+    if(next3){ next3.addEventListener('click', function(e){ 
+      e.preventDefault(); 
+      // Store vehicle data before submitting
+      storeVehicleData();
+      ajaxPostForm(form, function(data){ 
+        try{ 
+          if(data && data.form_html && (!data.success)){ 
+            document.getElementById('registrationWizard').innerHTML = data.form_html; 
+            bindWizard(); 
+            return; 
+          } 
+          if(data && data.form_html && data.success){ 
+            document.getElementById('registrationWizard').innerHTML = data.form_html; 
+            bindWizard(); 
+            // Restore vehicle data in step 4
+            setTimeout(function() {
+              restoreVehicleData();
+              if (typeof updateVehicleSummary === 'function') {
+                updateVehicleSummary();
+              }
+            }, 200);
+            return; 
+          } 
+          var cur = parseInt((document.getElementById('currentStep')||{value:3}).value||3,10); 
+          var next = Math.min(cur+1,4); 
+          loadStep(next); 
+        }catch(err){ console.error('Error handling step3 response', err); } 
+      }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); 
+    }); }
 
     // Intent and service selection visual toggles
     window.selectIntent = function(intentValue){
@@ -196,6 +224,47 @@
 
   // Initialize on DOM ready
   document.addEventListener('DOMContentLoaded', function(){ bindWizard(); });
+
+  // Vehicle data preservation functions
+  function storeVehicleData() {
+    try {
+      var vehicleData = {
+        plate_number: (document.getElementById('id_plate_number') || {}).value || '',
+        make: (document.getElementById('id_make') || {}).value || '',
+        model: (document.getElementById('id_model') || {}).value || '',
+        vehicle_type: (document.getElementById('id_vehicle_type') || {}).value || ''
+      };
+      sessionStorage.setItem('customerRegVehicleData', JSON.stringify(vehicleData));
+    } catch(e) { console.debug('Failed to store vehicle data', e); }
+  }
+  
+  function restoreVehicleData() {
+    try {
+      var stored = sessionStorage.getItem('customerRegVehicleData');
+      if (!stored) return;
+      
+      var vehicleData = JSON.parse(stored);
+      
+      // Restore form fields if they exist
+      var plateEl = document.getElementById('id_plate_number');
+      var makeEl = document.getElementById('id_make');
+      var modelEl = document.getElementById('id_model');
+      var typeEl = document.getElementById('id_vehicle_type');
+      
+      if (plateEl) plateEl.value = vehicleData.plate_number || '';
+      if (makeEl) makeEl.value = vehicleData.make || '';
+      if (modelEl) modelEl.value = vehicleData.model || '';
+      if (typeEl) typeEl.value = vehicleData.vehicle_type || '';
+      
+      // Update summary display
+      if (typeof updateVehicleSummary === 'function') {
+        updateVehicleSummary();
+      }
+      
+      // Clear stored data
+      sessionStorage.removeItem('customerRegVehicleData');
+    } catch(e) { console.debug('Failed to restore vehicle data', e); }
+  }
 
   // Expose a flag so inline progressive enhancement knows AJAX is active
   window.__CUSTOMER_REG_AJAX = true;

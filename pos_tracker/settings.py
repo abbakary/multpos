@@ -67,34 +67,29 @@ WSGI_APPLICATION = "pos_tracker.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.mysql'),
-#         'NAME': os.environ.get('DB_NAME', 'pos_db'),
-#         'USER': os.environ.get('DB_USER', 'root'),
-#         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-#         'HOST': os.environ.get('DB_HOST', 'localhost'),
-#         'PORT': os.environ.get('DB_PORT', '3306'),
-#         'OPTIONS': {
-#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-#             'charset': 'utf8mb4',
-#         },
-#     }
-# }
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': os.environ.get('DB_ENGINE', 'django.db.backends.mysql'),
+        'NAME': os.environ.get('DB_NAME', 'pos_db'),
+        'USER': os.environ.get('DB_USER', 'root'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'; SET time_zone='+03:00'",
+            'charset': 'utf8mb4',
+        },
     }
 }
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
 
-# For production with DATABASE_URL (e.g., on Render)
-if 'DATABASE_URL' in os.environ:
-    import dj_database_url
-    DATABASES['default'] = dj_database_url.config(
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+
+
 
 # Timezone settings
 TIME_ZONE = 'Asia/Riyadh'
@@ -106,7 +101,13 @@ LANGUAGE_CODE = "en-us"
 
 # Internationalization
 USE_I18N = True
-USE_L10N = True
+USE_L10N = False  # Disable localization to use custom formats
+
+# Custom date/time formats
+DATE_FORMAT = 'M d, Y'
+DATETIME_FORMAT = 'M d, Y H:i'
+SHORT_DATE_FORMAT = 'M d, Y'
+SHORT_DATETIME_FORMAT = 'M d, Y H:i'
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "tracker" / "static"]
@@ -121,3 +122,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 LOGIN_URL = "/login/"
+
+
+
+
+# in order to solve this easy and faster also faster, you needs to review the order_create page and its all related codes , to copy that implementations since is the same to customer_register steps or page to make the same consistency and correct logic depending on the page

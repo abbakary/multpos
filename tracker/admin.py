@@ -14,9 +14,10 @@ class VehicleAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("order_number", "customer", "type", "status", "priority", "created_at")
+    list_display = ("order_number", "customer", "type", "status", "priority", "created_at", "started_at", "completed_at", "cancelled_at", "signed_by")
     search_fields = ("order_number", "customer__full_name")
-    list_filter = ("type", "status", "priority")
+    list_filter = ("type", "status", "priority", "signed_by", "completed_at", "cancelled_at")
+    readonly_fields = ("order_number", "created_at", "started_at", "completed_at", "cancelled_at", "signed_at")
 
 
 @admin.register(InventoryItem)

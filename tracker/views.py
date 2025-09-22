@@ -9,6 +9,7 @@ from django.db.models.functions import TruncDate, TruncDay, TruncMonth, Concat
 from django.utils import timezone
 from django.template.loader import render_to_string
 from django.contrib.auth.views import LoginView
+from datetime import timedelta
 from .forms import ProfileForm, CustomerStep1Form, CustomerStep2Form, CustomerStep3Form, CustomerStep4Form, VehicleForm, OrderForm, CustomerEditForm, SystemSettingsForm, BrandForm
 from django.urls import reverse
 from django.contrib import messages
@@ -74,13 +75,13 @@ class CustomLogoutView(LogoutView):
 
 @login_required
 def dashboard(request: HttpRequest):
-    # Cache only heavy metrics; refresh dynamic sections every request
-    cache_key = "dashboard_metrics_v3"
-    metrics = cache.get(cache_key)
-
+    # Always calculate fresh metrics for accurate data
     today = timezone.localdate()
-
-    if not metrics:
+    
+    # Remove caching to ensure fresh data
+    metrics = None
+    
+    if True:  # Always recalculate
         total_orders = Order.objects.count()
         total_customers = Customer.objects.count()
 
@@ -99,23 +100,25 @@ def dashboard(request: HttpRequest):
         # Update status_counts to ensure 'completed' key exists
         status_counts['completed'] = completed_orders
 
-        # New customers this month
+        # New customers this month - use current date
+        from datetime import date
+        today_date = date.today()
         new_customers_this_month = Customer.objects.filter(
-            registration_date__year=today.year,
-            registration_date__month=today.month,
+            registration_date__year=today_date.year,
+            registration_date__month=today_date.month,
         ).count()
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
         average_order_value = 0
         pending_inquiries_count = Order.objects.filter(
             type="consultation",
-            status__in=["created", "assigned", "in_progress"],
+            status__in=["created", "in_progress"],
         ).count()
 
         # Upcoming appointments (next 7 days) based on active orders
         upcoming_appointments = (
             Order.objects.filter(
-                status__in=["created", "assigned", "in_progress"],
+                status__in=["created", "in_progress"],
                 created_at__date__gte=today,
                 created_at__date__lte=today + timedelta(days=7),
             )
@@ -176,13 +179,20 @@ def dashboard(request: HttpRequest):
                 'out_of_stock_count': out_of_stock_count,
             }
         }
-        cache.set(cache_key, metrics, 60)
+        # Don't cache metrics to ensure fresh data
+        # cache.set(cache_key, metrics, 60)
 
     # Always fresh data for fast-updating sections
     recent_orders = (
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
-    completed_today = Order.objects.filter(status="completed", completed_at__date=today).count()
+    # Fix completed today calculation
+    from datetime import date
+    today = date.today()
+    completed_today = Order.objects.filter(
+        status="completed", 
+        completed_at__date=today
+    ).count()
 
     context = {**metrics, "recent_orders": recent_orders, "completed_today": completed_today, "current_time": timezone.now()}
     # render after charts
@@ -197,10 +207,23 @@ def dashboard(request: HttpRequest):
         last_months.append(prev)
     last_months = list(reversed(last_months))
 
-    monthly_total_qs = Order.objects.filter(type="sales").annotate(m=TruncMonth("created_at")).values("m").annotate(c=Count("id"))
-    monthly_completed_qs = Order.objects.filter(type="sales", status="completed").annotate(m=TruncMonth("completed_at")).values("m").annotate(c=Count("id"))
-    monthly_total_map = {row["m"].date(): row["c"] for row in monthly_total_qs if row["m"]}
-    monthly_completed_map = {row["m"].date(): row["c"] for row in monthly_completed_qs if row["m"]}
+    # Simplified monthly data without TruncMonth to avoid timezone issues
+    monthly_total_map = {}
+    monthly_completed_map = {}
+    
+    try:
+        # Get orders from last 12 months without complex date truncation
+        twelve_months_ago = today - timedelta(days=365)
+        
+        total_orders = Order.objects.filter(type="sales", created_at__date__gte=twelve_months_ago).count()
+        completed_orders = Order.objects.filter(type="sales", status="completed", created_at__date__gte=twelve_months_ago).count()
+        
+        # Use current month as key for simplicity
+        current_month = today.replace(day=1)
+        monthly_total_map[current_month] = total_orders
+        monthly_completed_map[current_month] = completed_orders
+    except Exception:
+        pass
 
     def _month_label(d):
         return d.strftime("%b %Y")
@@ -215,10 +238,19 @@ def dashboard(request: HttpRequest):
     curr_month_start = today.replace(day=1)
     curr_days = [curr_month_start + timezone.timedelta(days=i) for i in range((today - curr_month_start).days + 1)]
 
-    daily_total_prev_qs = Order.objects.filter(type="sales", created_at__date__gte=curr_month_start, created_at__date__lte=today).annotate(d=TruncDate("created_at")).values("d").annotate(c=Count("id"))
-    daily_completed_prev_qs = Order.objects.filter(type="sales", status="completed", completed_at__date__gte=curr_month_start, completed_at__date__lte=today).annotate(d=TruncDate("completed_at")).values("d").annotate(c=Count("id"))
-    daily_total_prev_map = {row["d"]: row["c"] for row in daily_total_prev_qs if row["d"]}
-    daily_completed_prev_map = {row["d"]: row["c"] for row in daily_completed_prev_qs if row["d"]}
+    # Simplified daily data
+    daily_total_prev_map = {}
+    daily_completed_prev_map = {}
+    
+    try:
+        # Get today's data without complex date truncation
+        today_total = Order.objects.filter(type="sales", created_at__date=today).count()
+        today_completed = Order.objects.filter(type="sales", status="completed", created_at__date=today).count()
+        
+        daily_total_prev_map[today] = today_total
+        daily_completed_prev_map[today] = today_completed
+    except Exception:
+        pass
     sales_last_month = {
         "labels": [d.strftime("%Y-%m-%d") for d in curr_days],
         "total": [daily_total_prev_map.get(d, 0) for d in curr_days],
@@ -226,10 +258,20 @@ def dashboard(request: HttpRequest):
     }
 
     last_7_days = [today - timezone.timedelta(days=i) for i in range(6, -1, -1)]
-    daily_total_qs = Order.objects.filter(type="sales").annotate(d=TruncDate("created_at")).values("d").annotate(c=Count("id"))
-    daily_completed_qs = Order.objects.filter(type="sales", status="completed").annotate(d=TruncDate("completed_at")).values("d").annotate(c=Count("id"))
-    daily_total_map = {row["d"]: row["c"] for row in daily_total_qs if row["d"]}
-    daily_completed_map = {row["d"]: row["c"] for row in daily_completed_qs if row["d"]}
+    # Simplified weekly data
+    daily_total_map = {}
+    daily_completed_map = {}
+    
+    try:
+        # Get last 7 days data
+        for i in range(7):
+            date = today - timedelta(days=i)
+            total = Order.objects.filter(type="sales", created_at__date=date).count()
+            completed = Order.objects.filter(type="sales", status="completed", created_at__date=date).count()
+            daily_total_map[date] = total
+            daily_completed_map[date] = completed
+    except Exception:
+        pass
     sales_last_week = {
         "labels": [d.strftime("%Y-%m-%d") for d in last_7_days],
         "total": [daily_total_map.get(d, 0) for d in last_7_days],
@@ -324,13 +366,12 @@ def customers_list(request: HttpRequest):
     elif f_status == 'returning':
         qs = qs.filter(returning_dates__gt=1)
 
-    # Stats
-    today = timezone.localdate()
-    active_customers = Customer.objects.filter(arrival_time__date=today).count()
-    new_customers_today = Customer.objects.filter(registration_date__date=today).count()
-    returning_customers = Customer.objects.annotate(
-        d=Count('orders__created_at__date', distinct=True)
-    ).filter(d__gt=1).count()
+    # Stats - fix calculations with current date
+    from datetime import date
+    today_date = date.today()
+    active_customers = Customer.objects.filter(arrival_time__date=today_date).count()
+    new_customers_today = Customer.objects.filter(registration_date__date=today_date).count()
+    returning_customers = Customer.objects.filter(total_visits__gt=1).count()
 
     paginator = Paginator(qs, 20)
     page = request.GET.get('page')
@@ -550,16 +591,18 @@ def customer_register(request: HttpRequest):
         return errors
     
     def get_template_context(step, form, **kwargs):
-        # Get item-brand mapping for the form
-        from django.db.models import F
-        items = InventoryItem.objects.annotate(
-            brand_name=F('brand__name')
-        ).values('name', 'brand_name').distinct()
+        # Get inventory items for new single dropdown system
+        inventory_items = InventoryItem.objects.select_related('brand').filter(is_active=True, brand__isnull=False).order_by('brand__name', 'name')
         
-        item_brands = {}
-        for item in items:
-            if item['name'] and item['brand_name']:
-                item_brands[item['name']] = item['brand_name']
+        # Build item data mapping for JavaScript
+        item_data = {}
+        for item in inventory_items:
+            if item.name and item.brand:
+                item_data[str(item.id)] = {
+                    'name': item.name,
+                    'brand': item.brand.name,
+                    'quantity': item.quantity
+                }
         
         context = {
             'step': step,
@@ -569,9 +612,9 @@ def customer_register(request: HttpRequest):
             'step2': request.session.get('reg_step2', {}),
             'step3': request.session.get('reg_step3', {}),
             'today': timezone.now().date(),
-            'brands': Brand.objects.all(),
-            'item_brands_json': json.dumps(item_brands),
-            'item_names': sorted(item_brands.keys()),
+            'brands': Brand.objects.filter(is_active=True),
+            'inventory_items': inventory_items,
+            'item_data_json': json.dumps(item_data),
             'service_offers': [
                 'Oil Change', 'Engine Diagnostics', 'Brake Repair', 'Tire Rotation',
                 'Wheel Alignment', 'Battery Check', 'Fluid Top-Up', 'General Maintenance'
@@ -647,10 +690,8 @@ def customer_register(request: HttpRequest):
                 if sel_services:
                     order_initial['service_selection'] = sel_services
             elif order_initial['type'] == 'sales':
-                if step3d.get('item_name'):
-                    order_initial['item_name'] = step3d.get('item_name')
-                if step3d.get('brand'):
-                    order_initial['brand'] = step3d.get('brand')
+                if step3d.get('item_id'):
+                    order_initial['item_name'] = step3d.get('item_id')
                 if step3d.get('quantity'):
                     order_initial['quantity'] = step3d.get('quantity')
                 if step3d.get('tire_type'):
@@ -814,16 +855,35 @@ def customer_register(request: HttpRequest):
                 # Persist step 3 selections, including non-form fields for dynamic summary/show in step 4
                 step3_data = dict(form.cleaned_data)
                 if _intent == 'sales':
+                    item_id = (request.POST.get('item_name') or '').strip()
+                    # Get item details if item_id is provided
+                    item_name = ''
+                    brand_name = ''
+                    if item_id:
+                        try:
+                            item = InventoryItem.objects.select_related('brand').get(id=item_id)
+                            item_name = item.name
+                            brand_name = item.brand.name if item.brand else ''
+                        except InventoryItem.DoesNotExist:
+                            pass
+                    
                     step3_data.update({
-                        'item_name': (request.POST.get('item_name') or '').strip(),
-                        'brand': (request.POST.get('brand') or '').strip(),
+                        'item_id': item_id,
+                        'item_name': item_name,
+                        'brand': brand_name,
                         'quantity': (request.POST.get('quantity') or '').strip(),
                         'tire_type': (request.POST.get('tire_type') or '').strip(),
                         'tire_services': request.POST.getlist('tire_services') or [],
                     })
                 elif _intent == 'service':
                     step3_data.update({
-                        'service_selection': request.POST.getlist('service_selection') or []
+                        'service_selection': request.POST.getlist('service_selection') or [],
+                        'plate_number': request.POST.get('plate_number', '').strip(),
+                        'make': request.POST.get('make', '').strip(),
+                        'model': request.POST.get('model', '').strip(),
+                        'vehicle_type': request.POST.get('vehicle_type', '').strip(),
+                        'description': request.POST.get('description', '').strip(),
+                        'estimated_duration': request.POST.get('estimated_duration', '').strip(),
                     })
                 request.session["reg_step3"] = step3_data
                 request.session.save()
@@ -894,145 +954,145 @@ def customer_register(request: HttpRequest):
                     personal_subtype=data.get("personal_subtype"),
                 )
                 
-                # Create vehicle if car service was selected
+                # Create vehicle if vehicle information is provided
                 v = None
                 intent = step2_data.get("intent")
                 service_type = step3_data.get("service_type")
                 
-                if intent == "service" and service_type == "car_service":
-                    plate_number = request.POST.get("plate_number")
-                    make = request.POST.get("make")
-                    model = request.POST.get("model")
-                    vehicle_type = request.POST.get("vehicle_type")
-                    
-                    if plate_number or make or model:
-                        v = Vehicle.objects.create(
-                            customer=c,
-                            plate_number=plate_number,
-                            make=make,
-                            model=model,
-                            vehicle_type=vehicle_type
-                        )
+                # Get vehicle information from form
+                plate_number = request.POST.get("plate_number", "").strip()
+                make = request.POST.get("make", "").strip()
+                model = request.POST.get("model", "").strip()
+                vehicle_type = request.POST.get("vehicle_type", "").strip()
+                
+                # Create vehicle if any vehicle information is provided
+                if plate_number or make or model or vehicle_type:
+                    v = Vehicle.objects.create(
+                        customer=c,
+                        plate_number=plate_number or None,
+                        make=make or None,
+                        model=model or None,
+                        vehicle_type=vehicle_type or None
+                    )
                 
                 # Create order based on intent and service type
                 o = None
+                description = request.POST.get("description", "").strip()
+                
                 if intent == "sales":
-                    # Tire sales order
-                    item_name = request.POST.get("item_name")
-                    brand_input = (request.POST.get("brand") or '').strip()
-                    quantity = request.POST.get("quantity")
-                    tire_type = request.POST.get("tire_type")
-                    # Optional tire service add-ons
-                    tire_services = request.POST.getlist("tire_services") or []
+                    # Get data from step 3 session
+                    step3_data = request.session.get('reg_step3', {})
+                    item_id = step3_data.get('item_id') or request.POST.get("item_name")
+                    quantity = step3_data.get('quantity') or request.POST.get("quantity")
+                    tire_type = step3_data.get('tire_type') or request.POST.get("tire_type")
+                    tire_services = step3_data.get('tire_services', []) or request.POST.getlist("tire_services")
 
-                    if item_name and brand_input and quantity:
-                        # Check inventory
-                        inv_check_ok = True
-                        qty_int = int(quantity)
-
-                        # Resolve brand by id or name (case-insensitive)
-                        if brand_input.isdigit():
-                            brand_obj = Brand.objects.filter(id=int(brand_input)).first()
-                        else:
-                            brand_obj = Brand.objects.filter(name__iexact=brand_input).first()
-                        
-                        if not brand_obj and is_ajax:
-                            return json_response(
-                                False,
-                                form=form,
-                                message=f'Brand "{brand_input}" not found',
-                                message_type='error'
-                            )
-                        
-                        if not brand_obj:
-                            messages.error(request, f'Brand "{brand_input}" not found')
-                            inv_check_ok = False
-                        else:
-                            # Now filter by brand object
-                            item = InventoryItem.objects.filter(name=item_name, brand=brand_obj).first()
-                            if not item:
-                                if is_ajax:
-                                    return json_response(
-                                        False,
-                                        form=form,
-                                        message=f'Item "{item_name}" not found for brand "{brand_obj.name}" in inventory',
-                                        message_type='error'
-                                    )
-                                messages.error(request, f'Item "{item_name}" not found for brand "{brand_obj.name}" in inventory')
-                                inv_check_ok = False
-                            elif item.quantity < qty_int:
-                                if is_ajax:
-                                    return json_response(
-                                        False,
-                                        form=form,
-                                        message=f'Only {item.quantity} in stock for {item_name} ({brand_obj.name})',
-                                        message_type='error'
-                                    )
-                                messages.error(request, f'Only {item.quantity} in stock for {item_name} ({brand_obj.name})')
-                                inv_check_ok = False
-
-                        if not inv_check_ok:
-                            if is_ajax:
-                                return json_response(False, form=form)
-                            context = {"step": 4, "form": form}
-
-                        desc_addons = (", addons: " + ", ".join(tire_services)) if tire_services else ""
-                        o = Order.objects.create(
-                            customer=c,
-                            vehicle=v,
-                            type="sales",
-                            item_name=item_name,
-                            brand=brand_obj.name,
-                            quantity=qty_int,
-                            tire_type=tire_type,
-                            status="created",
-                            description=f"Tire Sales: {item_name} ({brand_obj.name}) - {tire_type}{desc_addons}"
-                        )
-
-                        # Update customer visit/arrival status for returning tracking
+                    if item_id and quantity:
                         try:
+                            item = InventoryItem.objects.select_related('brand').get(id=item_id)
+                            qty_int = int(quantity)
+                            
+                            # Check inventory
+                            if item.quantity < qty_int:
+                                if is_ajax:
+                                    return json_response(
+                                        False,
+                                        form=form,
+                                        message=f'Only {item.quantity} in stock for {item.name} ({item.brand.name})',
+                                        message_type='error'
+                                    )
+                                messages.error(request, f'Only {item.quantity} in stock for {item.name} ({item.brand.name})')
+                                return render(request, "tracker/customer_register.html", get_template_context(4, form))
+
+                            desc_addons = (", addons: " + ", ".join(tire_services)) if tire_services else ""
+                            final_description = description or f"Tire Sales: {item.name} ({item.brand.name}) - {tire_type}{desc_addons}"
+                            
+                            o = Order.objects.create(
+                                customer=c,
+                                vehicle=v,
+                                type="sales",
+                                item_name=item.name,
+                                brand=item.brand.name,
+                                quantity=qty_int,
+                                tire_type=tire_type,
+                                status="created",
+                                description=final_description
+                            )
+
+                            # Update customer visit/arrival status
                             c.arrival_time = timezone.now()
                             c.current_status = 'arrived'
                             c.save(update_fields=['arrival_time','current_status'])
-                        except Exception:
-                            pass
 
-                        # Adjust inventory
-                        from .utils import adjust_inventory
-                        adjust_inventory(item_name, brand_obj.name, -qty_int)
+                            # Adjust inventory
+                            from .utils import adjust_inventory
+                            adjust_inventory(item.name, item.brand.name, -qty_int)
+                            
+                        except InventoryItem.DoesNotExist:
+                            if is_ajax:
+                                return json_response(False, form=form, message='Selected item not found')
+                            messages.error(request, 'Selected item not found in inventory')
+                            return render(request, "tracker/customer_register.html", get_template_context(4, form))
+                        except ValueError:
+                            if is_ajax:
+                                return json_response(False, form=form, message='Invalid quantity')
+                            messages.error(request, 'Invalid quantity')
+                            return render(request, "tracker/customer_register.html", get_template_context(4, form))
+                    else:
+                        if is_ajax:
+                            return json_response(False, form=form, message='Item and quantity are required')
+                        messages.error(request, 'Item and quantity are required for sales orders')
+                        return render(request, "tracker/customer_register.html", get_template_context(4, form))
                         
                 # ... (rest of the code remains the same)
-                elif intent == "service" and service_type == "car_service":
-                    # Car service order
-                    # Persist selected service checkboxes from order_form (if any)
-                    selected_svcs = request.POST.getlist('service_selection') or []
+                elif intent == "service":
+                    # Get data from step 3 session
+                    step3_data = request.session.get('reg_step3', {})
+                    selected_svcs = step3_data.get('service_selection', []) or request.POST.getlist('service_selection')
                     desc_svcs = (", services: " + ", ".join(selected_svcs)) if selected_svcs else ""
+                    final_description = description or f"Car Service{desc_svcs}"
+                    estimated_duration = step3_data.get('estimated_duration') or request.POST.get("estimated_duration")
+                    
                     o = Order.objects.create(
                         customer=c,
                         vehicle=v,
                         type="service",
                         status="created",
-                        description=f"Car Service{desc_svcs}"
+                        description=final_description,
+                        estimated_duration=int(estimated_duration) if estimated_duration else None
                     )
                     
+                    # Update customer status
+                    c.arrival_time = timezone.now()
+                    c.current_status = 'arrived'
+                    c.save(update_fields=['arrival_time','current_status'])
+                    
                 elif intent == "inquiry":
-                    # Inquiry order
-                    inquiry_type = request.POST.get("inquiry_type")
-                    questions = request.POST.get("questions")
-                    contact_preference = request.POST.get("contact_preference")
-                    followup_date = request.POST.get("followup_date")
+                    # Get data from step 3 session
+                    step3_data = request.session.get('reg_step3', {})
+                    inquiry_type = step3_data.get('inquiry_type') or request.POST.get("inquiry_type")
+                    questions = step3_data.get('questions') or request.POST.get("questions")
+                    contact_preference = step3_data.get('contact_preference') or request.POST.get("contact_preference")
+                    followup_date = step3_data.get('followup_date') or request.POST.get("followup_date")
+                    
+                    final_description = description or f"Inquiry: {inquiry_type} - {questions}"
                     
                     o = Order.objects.create(
                         customer=c,
                         vehicle=v,
                         type="consultation",
                         status="created",
-                        description=f"Inquiry: {inquiry_type} - {questions}",
+                        description=final_description,
                         inquiry_type=inquiry_type,
                         questions=questions,
                         contact_preference=contact_preference,
                         follow_up_date=followup_date if followup_date else None
                     )
+                    
+                    # Update customer status
+                    c.arrival_time = timezone.now()
+                    c.current_status = 'arrived'
+                    c.save(update_fields=['arrival_time','current_status'])
                 # Update customer visit/arrival status for returning tracking
                 try:
                     c.arrival_time = timezone.now()
@@ -1046,15 +1106,27 @@ def customer_register(request: HttpRequest):
                     request.session.pop(key, None)
                 
                 if is_ajax:
-                    return json_response(
-                        True,
-                        message="Customer registered and order created successfully",
-                        message_type="success",
-                        redirect_url=reverse("tracker:order_detail", kwargs={'pk': o.id}) if o else reverse("tracker:customer_detail", kwargs={'pk': c.id})
-                    )
+                    if o:
+                        return json_response(
+                            True,
+                            message="Customer registered and order created successfully",
+                            message_type="success",
+                            redirect_url=reverse("tracker:order_detail", kwargs={'pk': o.id})
+                        )
+                    else:
+                        return json_response(
+                            True,
+                            message="Customer registered successfully",
+                            message_type="success",
+                            redirect_url=reverse("tracker:customer_detail", kwargs={'pk': c.id})
+                        )
                     
-                messages.success(request, "Customer registered and order created successfully")
-                return redirect("tracker:order_detail", pk=o.id) if o else redirect("tracker:customer_detail", pk=c.id)
+                if o:
+                    messages.success(request, "Customer registered and order created successfully")
+                    return redirect("tracker:order_detail", pk=o.id)
+                else:
+                    messages.success(request, "Customer registered successfully")
+                    return redirect("tracker:customer_detail", pk=c.id)
             elif is_ajax:
                 return json_response(False, form=form)
         
@@ -1087,16 +1159,21 @@ def customer_register(request: HttpRequest):
     context["step2"] = session_step2
     context["step3"] = request.session.get("reg_step3", {})
     context["today"] = timezone.now().date()
-    context["brands"] = Brand.objects.all()
-    # Build item -> brand mapping and item names for sales selection, and service offers list
-    from django.db.models import F as _F
-    _items = InventoryItem.objects.annotate(brand_name=_F('brand__name')).values('name', 'brand_name').distinct()
-    _item_brands = {}
-    for _it in _items:
-        if _it['name'] and _it['brand_name']:
-            _item_brands[_it['name']] = _it['brand_name']
-    context["item_brands_json"] = json.dumps(_item_brands)
-    context["item_names"] = sorted(_item_brands.keys())
+    # Get brands and inventory items for all steps
+    context["brands"] = Brand.objects.filter(is_active=True)
+    inventory_items = InventoryItem.objects.select_related('brand').filter(is_active=True, brand__isnull=False).order_by('brand__name', 'name')
+    context["inventory_items"] = inventory_items
+    
+    # Build item data mapping for JavaScript
+    item_data = {}
+    for item in inventory_items:
+        if item.name and item.brand:
+            item_data[str(item.id)] = {
+                'name': item.name,
+                'brand': item.brand.name,
+                'quantity': item.quantity
+            }
+    context["item_data_json"] = json.dumps(item_data)
     context["service_offers"] = [
         'Oil Change', 'Engine Diagnostics', 'Brake Repair', 'Tire Rotation',
         'Wheel Alignment', 'Battery Check', 'Fluid Top-Up', 'General Maintenance'
@@ -1174,6 +1251,25 @@ def create_order_for_customer(request: HttpRequest, pk: int):
             o = form.save(commit=False)
             o.customer = c
             o.status = "created"
+            
+            # Handle vehicle creation if new vehicle info is provided
+            if not o.vehicle:
+                plate_number = request.POST.get("plate_number", "").strip()
+                make = request.POST.get("make", "").strip()
+                model = request.POST.get("model", "").strip()
+                vehicle_type = request.POST.get("vehicle_type", "").strip()
+                
+                # Create vehicle if any vehicle information is provided
+                if plate_number or make or model or vehicle_type:
+                    v = Vehicle.objects.create(
+                        customer=c,
+                        plate_number=plate_number or None,
+                        make=make or None,
+                        model=model or None,
+                        vehicle_type=vehicle_type or None
+                    )
+                    o.vehicle = v
+            
             # Inventory check for sales
             if o.type == 'sales':
                 name = (o.item_name or '').strip()
@@ -1607,6 +1703,116 @@ def customer_groups(request: HttpRequest):
     # For regular requests, render the full template
     return render(request, 'tracker/customer_groups.html', context)
 
+@login_required
+def customer_groups_advanced(request: HttpRequest):
+    """Advanced customer groups page with AJAX functionality"""
+    return render(request, 'tracker/customer_groups_advanced.html')
+
+
+@login_required
+def api_customer_groups_data(request: HttpRequest):
+    """Advanced API endpoint for customer groups data"""
+    from django.db.models import Count, Sum, Avg, Q, F, Max, Min
+    from datetime import datetime, timedelta
+    
+    # Get parameters
+    group = request.GET.get('group', 'all')
+    period = request.GET.get('period', '6months')
+    
+    # Calculate date range
+    today = timezone.now().date()
+    if period == '1month':
+        start_date = today - timedelta(days=30)
+    elif period == '3months':
+        start_date = today - timedelta(days=90)
+    elif period == '1year':
+        start_date = today - timedelta(days=365)
+    else:
+        start_date = today - timedelta(days=180)
+    
+    # Get all customer types
+    customer_types = ['government', 'ngo', 'company', 'personal']
+    
+    # Build group statistics
+    groups_data = {}
+    total_customers = 0
+    total_orders = 0
+    total_revenue = 0
+    
+    for customer_type in customer_types:
+        # Get customers for this group
+        customers = Customer.objects.filter(customer_type=customer_type).annotate(
+            total_orders=Count('orders'),
+            recent_orders=Count('orders', filter=Q(orders__created_at__date__gte=start_date)),
+            service_orders=Count('orders', filter=Q(orders__type='service')),
+            sales_orders=Count('orders', filter=Q(orders__type='sales')),
+            consultation_orders=Count('orders', filter=Q(orders__type='consultation')),
+            completed_orders=Count('orders', filter=Q(orders__status='completed')),
+            last_order_date=Max('orders__created_at'),
+            vehicles_count=Count('vehicles', distinct=True)
+        )
+        
+        customer_count = customers.count()
+        group_orders = sum(c.total_orders for c in customers) or 0
+        group_revenue = sum(float(c.total_spent or 0) for c in customers) or 0
+        
+        # Calculate averages
+        avg_orders = group_orders / customer_count if customer_count > 0 else 0
+        avg_revenue = group_revenue / customer_count if customer_count > 0 else 0
+        
+        # Get top customers
+        top_customers = list(customers.order_by('-total_spent')[:5].values(
+            'id', 'full_name', 'phone', 'total_spent', 'total_orders', 'last_order_date'
+        ))
+        
+        groups_data[customer_type] = {
+            'name': dict(Customer.TYPE_CHOICES)[customer_type],
+            'customer_count': customer_count,
+            'total_orders': group_orders,
+            'total_revenue': float(group_revenue),
+            'avg_orders': round(avg_orders, 1),
+            'avg_revenue': round(float(avg_revenue), 2),
+            'top_customers': top_customers
+        }
+        
+        total_customers += customer_count
+        total_orders += group_orders
+        total_revenue += float(group_revenue)
+    
+    # If specific group requested, get detailed data
+    group_details = None
+    if group != 'all' and group in customer_types:
+        customers = Customer.objects.filter(customer_type=group).annotate(
+            total_orders=Count('orders'),
+            recent_orders=Count('orders', filter=Q(orders__created_at__date__gte=start_date)),
+            service_orders=Count('orders', filter=Q(orders__type='service')),
+            sales_orders=Count('orders', filter=Q(orders__type='sales')),
+            consultation_orders=Count('orders', filter=Q(orders__type='consultation')),
+            completed_orders=Count('orders', filter=Q(orders__status='completed')),
+            last_order_date=Max('orders__created_at'),
+            vehicles_count=Count('vehicles', distinct=True)
+        ).order_by('-total_spent')
+        
+        group_details = {
+            'customers': list(customers.values(
+                'id', 'full_name', 'phone', 'email', 'total_spent', 'total_orders',
+                'recent_orders', 'service_orders', 'sales_orders', 'consultation_orders',
+                'completed_orders', 'last_order_date', 'vehicles_count', 'registration_date'
+            )[:50]),
+            'stats': groups_data.get(group, {})
+        }
+    
+    return JsonResponse({
+        'success': True,
+        'groups': groups_data,
+        'totals': {
+            'customers': total_customers,
+            'orders': total_orders,
+            'revenue': round(total_revenue, 2)
+        },
+        'group_details': group_details,
+        'period': period
+    })
 
 @login_required
 def customer_groups_data(request: HttpRequest):
@@ -1738,7 +1944,7 @@ def orders_list(request: HttpRequest):
     # Get counts for stats
     total_orders = Order.objects.count()
     pending_orders = Order.objects.filter(status="created").count()
-    active_orders = Order.objects.filter(status__in=["assigned", "in_progress"]).count()
+    active_orders = Order.objects.filter(status__in=["created", "in_progress"]).count()
     completed_today = Order.objects.filter(status="completed", completed_at__date=timezone.localdate()).count()
     urgent_orders = Order.objects.filter(priority="urgent").count()
     revenue_today = 0
@@ -1756,7 +1962,6 @@ def orders_list(request: HttpRequest):
         "completed_today": completed_today,
         "urgent_orders": urgent_orders,
         "revenue_today": revenue_today,
-        "timezone": tzname or timezone.get_current_timezone_name(),
     })
     # Support GET ?customer=<id> to go straight into order form for that customer
     if request.method == 'GET':
@@ -1787,7 +1992,6 @@ def orders_list(request: HttpRequest):
             'description': request.POST.get('description', ''),
             'estimated_duration': request.POST.get('estimated_duration') or None,
             'item_name': (request.POST.get('item_name') or '').strip(),
-            'brand': (request.POST.get('brand') or '').strip(),
             'quantity': None,
             'inquiry_type': (request.POST.get('inquiry_type') or '').strip(),
             'questions': request.POST.get('questions', ''),
@@ -1798,22 +2002,41 @@ def orders_list(request: HttpRequest):
         if vehicle_id:
             vehicle = get_object_or_404(Vehicle, id=vehicle_id, customer=customer)
             order_data['vehicle'] = vehicle
+        else:
+            # Check if new vehicle info is provided
+            plate_number = request.POST.get('plate_number', '').strip()
+            make = request.POST.get('make', '').strip()
+            model = request.POST.get('model', '').strip()
+            vehicle_type = request.POST.get('vehicle_type', '').strip()
+            
+            # Create vehicle if any vehicle information is provided
+            if plate_number or make or model or vehicle_type:
+                vehicle = Vehicle.objects.create(
+                    customer=customer,
+                    plate_number=plate_number or None,
+                    make=make or None,
+                    model=model or None,
+                    vehicle_type=vehicle_type or None
+                )
+                order_data['vehicle'] = vehicle
         if order_data.get('type') == 'sales':
-            name = (order_data.get('item_name') or '').strip()
-            brand = (order_data.get('brand') or '').strip()
+            item_id = (order_data.get('item_name') or '').strip()
             try:
                 qty = int(request.POST.get('quantity') or 0)
             except (TypeError, ValueError):
                 qty = 0
-            if not name or not brand or qty <= 0:
-                return JsonResponse({'success': False, 'message': 'Item, brand and valid quantity are required', 'code': 'invalid'})
-            from django.db.models import Sum
-            available = InventoryItem.objects.filter(name=name, brand__name__iexact=brand).aggregate(total=Sum('quantity')).get('total') or 0
-            if available <= 0:
-                return JsonResponse({'success': False, 'message': 'Item not found in inventory', 'code': 'not_found'})
-            if available < qty:
-                return JsonResponse({'success': False, 'message': f'Only {available} in stock for {name} ({brand})', 'code': 'insufficient_stock', 'available': available})
-            order_data['quantity'] = qty
+            if not item_id or qty <= 0:
+                return JsonResponse({'success': False, 'message': 'Item selection and valid quantity are required', 'code': 'invalid'})
+            
+            try:
+                item = InventoryItem.objects.select_related('brand').get(id=item_id)
+                if item.quantity < qty:
+                    return JsonResponse({'success': False, 'message': f'Only {item.quantity} in stock for {item.name} ({item.brand.name})', 'code': 'insufficient_stock', 'available': item.quantity})
+                order_data['item_name'] = item.name
+                order_data['brand'] = item.brand.name
+                order_data['quantity'] = qty
+            except InventoryItem.DoesNotExist:
+                return JsonResponse({'success': False, 'message': 'Selected item not found in inventory', 'code': 'not_found'})
         order = Order.objects.create(**order_data)
         # Update customer visit/arrival status for returning tracking
         try:
@@ -1842,18 +2065,32 @@ def orders_list(request: HttpRequest):
         o = form.save(commit=False)
         o.customer = c
         o.status = 'created'
-        # Sales inventory validation
+        
+        # Handle vehicle creation if new vehicle info is provided
+        if not o.vehicle:
+            plate_number = request.POST.get('plate_number', '').strip()
+            make = request.POST.get('make', '').strip()
+            model = request.POST.get('model', '').strip()
+            vehicle_type = request.POST.get('vehicle_type', '').strip()
+            
+            # Create vehicle if any vehicle information is provided
+            if plate_number or make or model or vehicle_type:
+                v = Vehicle.objects.create(
+                    customer=c,
+                    plate_number=plate_number or None,
+                    make=make or None,
+                    model=model or None,
+                    vehicle_type=vehicle_type or None
+                )
+                o.vehicle = v
+        
+        # Sales inventory validation - item_name and brand are already set by form.clean()
         if o.type == 'sales':
             name = (o.item_name or '').strip()
             brand = (o.brand or '').strip()
             qty = int(o.quantity or 0)
-            from django.db.models import Sum
-            available = InventoryItem.objects.filter(name=name, brand__name__iexact=brand).aggregate(total=Sum('quantity')).get('total') or 0
             if not name or not brand or qty <= 0:
-                messages.error(request, 'Item, brand and valid quantity are required')
-                return render(request, "tracker/order_create.html", {"customer": c, "form": form})
-            if available < qty:
-                messages.error(request, f'Only {available} in stock for {name} ({brand})')
+                messages.error(request, 'Item selection and valid quantity are required')
                 return render(request, "tracker/order_create.html", {"customer": c, "form": form})
         o.save()
         # Update customer visit/arrival status for returning tracking
@@ -1950,63 +2187,124 @@ def customer_detail(request: HttpRequest, pk: int):
         'orders': orders,
         'vehicles': vehicles,
         'notes': notes,
-        'timezone': tzname or timezone.get_current_timezone_name(),
     })
 
 
 @login_required
 def order_detail(request: HttpRequest, pk: int):
     order = get_object_or_404(Order, pk=pk)
+    # Auto-progress created -> in_progress after 10 minutes
+    try:
+        order.auto_progress_if_elapsed()
+    except Exception:
+        pass
     # Get timezone from cookie or use default
     tzname = request.COOKIES.get('django_timezone')
     
-    # Prepare context with timezone info
+    # Prepare context
     context = {
         "order": order,
-        "timezone": tzname or timezone.get_current_timezone_name()
     }
     return render(request, "tracker/order_detail.html", context)
 
 
 @login_required
 def update_order_status(request: HttpRequest, pk: int):
+    """Allow only transitioning an order to in_progress (start). Completion and
+    cancellation are handled by dedicated endpoints."""
     o = get_object_or_404(Order, pk=pk)
-    status = request.POST.get("status")
-    now = timezone.now()
-    if status in dict(Order.STATUS_CHOICES):
-        o.status = status
-        if status == "assigned":
-            o.assigned_at = now
-        elif status == "in_progress":
-            o.started_at = now
-        elif status == "completed":
-            o.completed_at = now
-            if o.started_at:
-                o.actual_duration = int((now - o.started_at).total_seconds() // 60)
-            c = o.customer
-            c.total_spent = c.total_spent + 0  # integrate billing later
-            c.last_visit = now
-            c.current_status = "completed"
-            c.save()
-        elif status == "cancelled":
-            o.cancelled_at = now
-            # Restock on cancellation for sales orders
-            if o.type == 'sales' and (o.quantity or 0) > 0 and o.item_name and o.brand:
-                from .utils import adjust_inventory
-                adjust_inventory(o.item_name, o.brand, (o.quantity or 0))
-        o.save()
-        try:
-            add_audit_log(request.user, 'order_status_update', f"Order {o.order_number}: {o.status}")
-        except Exception:
-            pass
-        messages.success(request, f"Order status updated to {status.replace('_',' ').title()}")
-    else:
-        messages.error(request, "Invalid status")
+    if request.method == 'POST':
+        status = request.POST.get("status")
+        if status == "in_progress" and o.status in ["created", "in_progress"]:
+            if not o.started_at:
+                o.started_at = timezone.now()
+            o.status = "in_progress"
+            o.save(update_fields=["status", "started_at"])
+            try:
+                add_audit_log(request.user, 'order_status_update', f"Order {o.order_number}: set to in_progress")
+            except Exception:
+                pass
+            messages.success(request, "Order started and set to In Progress")
+        else:
+            messages.error(request, "Invalid status change. Use Complete or Cancel actions for finalization.")
     return redirect("tracker:order_detail", pk=o.id)
 
 
 @login_required
+def complete_order(request: HttpRequest, pk: int):
+    """Complete an order with password confirmation and either a signature image
+    or an attachment. Computes duration and adjusts inventory for sales."""
+    o = get_object_or_404(Order, pk=pk)
+    if request.method != 'POST':
+        return redirect('tracker:order_detail', pk=o.id)
+
+    password = request.POST.get('password', '')
+    if not password or not request.user.check_password(password):
+        messages.error(request, 'Password confirmation failed. Please enter your account password to sign.')
+        return redirect('tracker:order_detail', pk=o.id)
+
+    sig = request.FILES.get('signature_file')
+    att = request.FILES.get('completion_attachment')
+    if not sig and not att:
+        messages.error(request, 'Please upload a signature image or a completion file to finalize the order.')
+        return redirect('tracker:order_detail', pk=o.id)
+
+    now = timezone.now()
+    if not o.started_at:
+        o.started_at = now
+        o.status = 'in_progress'
+
+    if sig:
+        o.signature_file = sig
+    if att:
+        o.completion_attachment = att
+    o.signed_by = request.user
+    o.signed_at = now
+
+    o.status = 'completed'
+    o.completed_at = now
+    if o.started_at:
+        o.actual_duration = int((now - o.started_at).total_seconds() // 60)
+
+    if o.type == 'sales' and (o.quantity or 0) > 0 and o.item_name and o.brand:
+        from .utils import adjust_inventory
+        adjust_inventory(o.item_name, o.brand, (o.quantity or 0))
+
+    o.save()
+    try:
+        add_audit_log(request.user, 'order_completed', f"Order {o.order_number} completed with signature/attachment")
+    except Exception:
+        pass
+    messages.success(request, 'Order marked as completed.')
+    return redirect('tracker:order_detail', pk=o.id)
+
+
+@login_required
+def cancel_order(request: HttpRequest, pk: int):
+    """Cancel an order with a required reason."""
+    o = get_object_or_404(Order, pk=pk)
+    if request.method != 'POST':
+        return redirect('tracker:order_detail', pk=o.id)
+    reason = (request.POST.get('reason') or '').strip()
+    if not reason:
+        messages.error(request, 'Cancellation requires a reason.')
+        return redirect('tracker:order_detail', pk=o.id)
+    now = timezone.now()
+    o.status = 'cancelled'
+    o.cancelled_at = now
+    o.cancellation_reason = reason
+    o.save(update_fields=['status', 'cancelled_at', 'cancellation_reason'])
+    try:
+        add_audit_log(request.user, 'order_cancelled', f"Order {o.order_number} cancelled: {reason}")
+    except Exception:
+        pass
+    messages.success(request, 'Order cancelled.')
+    return redirect('tracker:order_detail', pk=o.id)
+
+
+@login_required
 def analytics(request: HttpRequest):
+    """Analytics page summarizing orders by period with four statuses only."""
     from datetime import timedelta
     period = request.GET.get('period', 'monthly')
 
@@ -2049,7 +2347,7 @@ def analytics(request: HttpRequest):
     elif period == 'yearly':
         from django.db.models.functions import ExtractMonth
         by_month = {int(row['m']): row['c'] for row in qs.annotate(m=ExtractMonth('created_at')).values('m').annotate(c=Count('id'))}
-        trend_values = [by_month.get(i, 0) for i in range(1, 13)]
+        trend_values = [by_month.get(i, 0) for i in range(1, 12 + 1)]
         trend_labels = labels
     else:  # monthly
         by_date = {row['day']: row['c'] for row in qs.annotate(day=TruncDate('created_at')).values('day').annotate(c=Count('id'))}
@@ -2061,10 +2359,9 @@ def analytics(request: HttpRequest):
 
     charts = {
         'status': {
-            'labels': ['Created','Assigned','In Progress','Completed','Cancelled'],
+            'labels': ['Created','In Progress','Completed','Cancelled'],
             'values': [
                 status_counts.get('created',0),
-                status_counts.get('assigned',0),
                 status_counts.get('in_progress',0),
                 status_counts.get('completed',0),
                 status_counts.get('cancelled',0),
@@ -2093,7 +2390,7 @@ def analytics(request: HttpRequest):
     totals = {
         'total_orders': qs.count(),
         'completed': qs.filter(status='completed').count(),
-        'in_progress': qs.filter(status__in=['created','assigned','in_progress']).count(),
+        'in_progress': qs.filter(status__in=['created','in_progress']).count(),
         'customers': Customer.objects.filter(registration_date__date__range=[start_date, end_date]).count(),
     }
 
@@ -2162,7 +2459,7 @@ def reports(request: HttpRequest):
     stats = {
         "total": total,
         "completed": completed_qs.filter(status="completed").count(),
-        "in_progress": by_status.get("in_progress", 0) + by_status.get("assigned", 0) + by_status.get("created", 0),
+        "in_progress": by_status.get("in_progress", 0) + by_status.get("created", 0),
         "cancelled": by_status.get("cancelled", 0),
     }
 
@@ -2192,10 +2489,9 @@ def reports(request: HttpRequest):
 
     charts = {
         'status': {
-            'labels': ['Created','Assigned','In Progress','Completed','Cancelled'],
+            'labels': ['Created','In Progress','Completed','Cancelled'],
             'values': [
                 by_status.get('created',0),
-                by_status.get('assigned',0),
                 by_status.get('in_progress',0),
                 by_status.get('completed',0),
                 by_status.get('cancelled',0),
@@ -2520,6 +2816,48 @@ def api_inventory_brands(request: HttpRequest):
     return JsonResponse(data)
 
 @login_required
+def api_create_item_with_brand(request: HttpRequest):
+    """API endpoint to create a new item with brand during order creation"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            item_name = data.get('item_name', '').strip()
+            brand_name = data.get('brand_name', '').strip()
+            
+            if not item_name or not brand_name:
+                return JsonResponse({'success': False, 'error': 'Item name and brand name are required'})
+            
+            # Get or create brand
+            brand, created = Brand.objects.get_or_create(
+                name__iexact=brand_name,
+                defaults={'name': brand_name, 'is_active': True}
+            )
+            
+            # Create inventory item
+            item = InventoryItem.objects.create(
+                name=item_name,
+                brand=brand,
+                quantity=0,  # Start with 0 quantity
+                price=0,
+                is_active=True
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'item': {
+                    'id': item.id,
+                    'name': item.name,
+                    'brand': brand.name,
+                    'label': f"{brand.name} - {item.name}"
+                }
+            })
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+@login_required
 def api_inventory_stock(request: HttpRequest):
     """API endpoint to check inventory stock for an item"""
     name = request.GET.get('name', '').strip()
@@ -2656,12 +2994,13 @@ def api_notifications_summary(request: HttpRequest):
     stock_threshold = int(request.GET.get('stock_threshold', 5) or 5)
     overdue_hours = int(request.GET.get('overdue_hours', 24) or 24)
 
-    today = timezone.localdate()
+    from datetime import date
+    today_date = date.today()
     now = timezone.now()
     cutoff = now - timedelta(hours=overdue_hours)
 
     # Today's visitors (arrival_time today)
-    todays_qs = Customer.objects.filter(arrival_time__date=today).order_by('-arrival_time')
+    todays_qs = Customer.objects.filter(arrival_time__date=today_date).order_by('-arrival_time')
     todays_count = todays_qs.count()
     todays = [{
         'id': c.id,
@@ -2681,7 +3020,7 @@ def api_notifications_summary(request: HttpRequest):
     } for i in low_qs[:8]]
 
     # Overdue orders (not completed, older than cutoff)
-    overdue_qs = Order.objects.filter(status__in=['created','assigned','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
+    overdue_qs = Order.objects.filter(status__in=['created','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
     overdue_count = overdue_qs.count()
     def age_minutes(dt):
         return int((now - dt).total_seconds() // 60) if dt else None
@@ -3527,7 +3866,7 @@ def reports_advanced(request: HttpRequest):
         completed_at__lt=end_dt,
         status='completed',
     ).count()
-    pending_orders = qs.filter(status__in=['created', 'assigned', 'in_progress']).count()
+    pending_orders = qs.filter(status__in=['created', 'in_progress']).count()
     total_customers = cqs.count()
 
     completion_rate = int((completed_orders * 100) / total_orders) if total_orders > 0 else 0
@@ -3581,10 +3920,9 @@ def reports_advanced(request: HttpRequest):
     chart_data = {
         'trend': { 'labels': labels, 'values': trend_values },
         'status': {
-            'labels': ['Created', 'Assigned', 'In Progress', 'Completed', 'Cancelled'],
+            'labels': ['Created', 'In Progress', 'Completed', 'Cancelled'],
             'values': [
                 qs.filter(status='created').count(),
-                qs.filter(status='assigned').count(),
                 qs.filter(status='in_progress').count(),
                 Order.objects.filter(completed_at__gte=start_dt, completed_at__lt=end_dt, status='completed').count(),
                 qs.filter(status='cancelled').count(),
@@ -3595,13 +3933,12 @@ def reports_advanced(request: HttpRequest):
             'values': [stats['service_orders'], stats['sales_orders'], stats['consultation_orders']]
         },
         'types': {
-            'labels': ['Personal', 'Company', 'Government', 'NGO', 'Bodaboda'],
+            'labels': ['Personal', 'Company', 'Government', 'NGO'],
             'values': [
                 cqs.filter(customer_type='personal').count(),
                 cqs.filter(customer_type='company').count(),
                 cqs.filter(customer_type='government').count(),
                 cqs.filter(customer_type='ngo').count(),
-                cqs.filter(customer_type='bodaboda').count(),
             ]
         }
     }
@@ -3876,14 +4213,12 @@ def analytics_customer(request: HttpRequest):
                 "NGO",
                 "Private Company",
                 "Personal",
-                "Bodaboda",
             ],
             "values": [
                 type_counts.get("government", 0),
                 type_counts.get("ngo", 0),
                 type_counts.get("company", 0),
                 type_counts.get("personal", 0),
-                type_counts.get("bodaboda", 0),
             ],
         },
     }
@@ -3950,7 +4285,7 @@ def analytics_service(request: HttpRequest):
     by_status = {r["status"] or "": r["c"] for r in qs.values("status").annotate(c=Count("id"))}
 
     # Status by type matrix for stacked chart
-    status_order = ["created", "assigned", "in_progress", "completed", "cancelled"]
+    status_order = ["created", "in_progress", "completed", "cancelled"]
     type_order = ["sales", "service", "consultation"]
     status_by_app = { (r["type"] or "", r["status"] or ""): r["c"] for r in qs.values("type", "status").annotate(c=Count("id")) }
     status_series = [

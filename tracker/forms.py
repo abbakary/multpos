@@ -465,41 +465,41 @@ class OrderForm(forms.ModelForm):
         if not self.fields["estimated_duration"].initial:
             self.fields["estimated_duration"].initial = 50
 
-        # Dynamic item and brand choices from inventory
+        # Dynamic item choices with brand info from inventory
         try:
             # Get all active inventory items with their brands
-            items = InventoryItem.objects.select_related('brand').filter(is_active=True).order_by('name').distinct()
+            items = InventoryItem.objects.select_related('brand').filter(is_active=True).order_by('brand__name', 'name')
             
-            # Create item choices
-            name_choices = [('', 'Select item')] + [(item.name, item.name) for item in items if item.name]
-            self.fields["item_name"].widget = forms.Select(attrs={'class': 'form-select'}, choices=name_choices)
+            # Create combined item choices (value = item_id, label = "Brand - Item Name")
+            item_choices = [('', 'Select item')]
+            item_brand_map = {}
             
-            # Create brand choices using brand names as values
-            brand_choices = [('', 'Select brand')]
-
-            # Get all unique brand names from inventory items
-            brand_names = set()
-            brand_map = {}
             for item in items:
-                if item.brand and item.brand.name:
-                    brand_names.add(item.brand.name)
-                    brand_map[item.name] = item.brand.name
-
-            # Add brands to choices (value = label = brand name)
-            brand_choices += sorted([(bn, bn) for bn in brand_names], key=lambda x: x[1])
-
-            # Set brand choices
-            self.fields["brand"].widget = forms.Select(attrs={'class': 'form-select'}, choices=brand_choices)
-
-            # Add brand mapping as data attribute for JavaScript
-            self.fields["item_name"].widget.attrs['data-brands'] = json.dumps(brand_map)
+                if item.name and item.brand:
+                    label = f"{item.brand.name} - {item.name}"
+                    item_choices.append((item.id, label))
+                    item_brand_map[str(item.id)] = {
+                        'name': item.name,
+                        'brand': item.brand.name,
+                        'quantity': item.quantity
+                    }
+            
+            self.fields["item_name"].widget = forms.Select(
+                attrs={
+                    'class': 'form-select',
+                    'data-items': json.dumps(item_brand_map)
+                }, 
+                choices=item_choices
+            )
+            
+            # Hide brand field since it will be auto-filled
+            self.fields["brand"].widget = forms.HiddenInput()
             
         except Exception as e:
             print(f"Error initializing OrderForm: {str(e)}")
-            name_choices = [('', 'Select item')]
-            brand_choices = [('', 'Select brand')]
-            self.fields["item_name"].widget = forms.Select(attrs={'class': 'form-select'}, choices=name_choices)
-            self.fields["brand"].widget = forms.Select(attrs={'class': 'form-select'}, choices=brand_choices)
+            item_choices = [('', 'Select item')]
+            self.fields["item_name"].widget = forms.Select(attrs={'class': 'form-select'}, choices=item_choices)
+            self.fields["brand"].widget = forms.HiddenInput()
         
         # Tire type choices
         self.fields["tire_type"].widget = forms.Select(
@@ -540,9 +540,18 @@ class OrderForm(forms.ModelForm):
         t = cleaned.get("type")
         
         if t == "sales":
-            for f in ["item_name", "brand"]:
-                if not cleaned.get(f):
-                    self.add_error(f, "Required for Sales orders")
+            item_id = cleaned.get("item_name")
+            if not item_id:
+                self.add_error("item_name", "Item selection is required for Sales orders")
+            else:
+                # Get item details and set brand
+                try:
+                    item = InventoryItem.objects.select_related('brand').get(id=item_id)
+                    cleaned["item_name"] = item.name
+                    cleaned["brand"] = item.brand.name if item.brand else ""
+                except InventoryItem.DoesNotExist:
+                    self.add_error("item_name", "Selected item not found")
+            
             q = cleaned.get("quantity")
             if not q or q < 1:
                 self.add_error("quantity", "Quantity must be at least 1")

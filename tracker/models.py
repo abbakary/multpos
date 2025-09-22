@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q
+from datetime import timedelta
 import uuid
 
 
@@ -11,7 +12,6 @@ class Customer(models.Model):
         ("ngo", "NGO"),
         ("company", "Private Company"),
         ("personal", "Personal"),
-        ("bodaboda", "Bodaboda"),
     ]
     PERSONAL_SUBTYPE = [("owner", "Owner"), ("driver", "Driver")]
     STATUS_CHOICES = [
@@ -66,7 +66,6 @@ class Customer(models.Model):
             'ngo': 'hands-helping',
             'company': 'building',
             'personal': 'user',
-            'bodaboda': 'motorcycle',
         }
         return icon_map.get(self.customer_type, 'user')
         
@@ -111,7 +110,6 @@ class Order(models.Model):
     TYPE_CHOICES = [("service", "Service"), ("sales", "Sales"), ("consultation", "Inquiries")]
     STATUS_CHOICES = [
         ("created", "Created"),
-        ("assigned", "Assigned"),
         ("in_progress", "In Progress"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
@@ -143,12 +141,34 @@ class Order(models.Model):
 
     # Timestamps and assignment
     created_at = models.DateTimeField(default=timezone.now)
-    assigned_at = models.DateTimeField(blank=True, null=True)
     started_at = models.DateTimeField(blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
     cancelled_at = models.DateTimeField(blank=True, null=True)
 
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="assigned_orders")
+
+    # Completion evidence and signer
+    signature_file = models.ImageField(upload_to='order_signatures/', blank=True, null=True)
+    completion_attachment = models.FileField(upload_to='order_attachments/', blank=True, null=True)
+    signed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders_signed')
+    signed_at = models.DateTimeField(blank=True, null=True)
+
+    # Cancellation metadata
+    cancellation_reason = models.TextField(blank=True, null=True)
+
+    def auto_progress_if_elapsed(self) -> bool:
+        """Automatically move from created to in_progress after 10 minutes.
+        Returns True if a change was made."""
+        try:
+            if self.status == 'created' and self.created_at and timezone.now() - self.created_at >= timedelta(minutes=10):
+                self.status = 'in_progress'
+                if not self.started_at:
+                    self.started_at = timezone.now()
+                self.save(update_fields=['status', 'started_at'])
+                return True
+        except Exception:
+            pass
+        return False
 
     def save(self, *args, **kwargs):
         creating = self._state.adding

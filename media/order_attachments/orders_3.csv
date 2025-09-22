@@ -1,0 +1,19 @@
+Order,Customer,Type,Status,Priority,Created At
+ORD6E286919,Kibaha City,sales,created,medium,2025-09-03T11:59:39.787154+00:00
+ORDAC088207,Kibaha City,service,created,medium,2025-09-03T11:59:06.171053+00:00
+ORDF5E4FF8F,Kibaha City,sales,created,medium,2025-09-03T11:47:14.080395+00:00
+ORD1E94B269,Kibaha City,sales,completed,medium,2025-09-03T11:10:56.034115+00:00
+ORD7029B5FD,Kibaha City,sales,created,medium,2025-09-03T09:39:43.471341+00:00
+ORD19B2070F,Kibaha City,sales,created,medium,2025-09-03T09:38:38.433010+00:00
+ORD46ED7949,Kibaha City,service,completed,medium,2025-09-03T09:36:27.901505+00:00
+ORDEB10C26B,Kibaha City,service,assigned,medium,2025-09-02T09:35:31.692281+00:00
+ORD010,Emily Davis,sales,completed,urgent,2025-08-31T18:00:08.292902+00:00
+ORD003,Robert Johnson,consultation,assigned,medium,2025-08-27T18:00:08.272353+00:00
+ORD009,Emily Davis,sales,in_progress,urgent,2025-08-26T18:00:08.289855+00:00
+ORD002,Robert Johnson,sales,completed,urgent,2025-08-25T18:00:08.269528+00:00
+ORD008,Michael Brown,sales,created,high,2025-08-21T18:00:08.286875+00:00
+ORD005,Emily Davis,consultation,completed,medium,2025-08-17T18:00:08.278390+00:00
+ORD007,Emily Davis,consultation,in_progress,high,2025-08-14T18:00:08.284015+00:00
+ORD001,ABC Company Ltd,sales,created,urgent,2025-08-14T18:00:08.266100+00:00
+ORD004,Jane Smith,service,in_progress,medium,2025-08-09T18:00:08.275120+00:00
+ORD006,Jane Smith,consultation,cancelled,high,2025-08-01T18:00:08.281166+00:00

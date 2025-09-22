@@ -25,7 +25,9 @@ urlpatterns = [
     path("customers/<int:pk>/note/", views.add_customer_note, name="add_customer_note"),
     path("customers/<int:customer_id>/note/<int:note_id>/delete/", views.delete_customer_note, name="delete_customer_note"),
     path("customers/<int:pk>/order/new/", views.create_order_for_customer, name="create_order_for_customer"),
-    path("customer-groups/", views.customer_groups, name="customer_groups"),
+    path("customer-groups/", views.customer_groups_advanced, name="customer_groups"),
+    path("customer-groups/advanced/", views.customer_groups_advanced, name="customer_groups_advanced"),
+    path("api/customer-groups-data/", views.api_customer_groups_data, name="api_customer_groups_data"),
     path("customer-groups/export/", views.customer_groups_export, name="customer_groups_export"),
     path("api/customer-groups/data/", views.customer_groups_data, name="customer_groups_data"),
 
@@ -36,6 +38,8 @@ urlpatterns = [
     path("orders/<int:pk>/edit/", views.order_edit, name="order_edit"),
     path("orders/<int:pk>/delete/", views.order_delete, name="order_delete"),
     path("orders/<int:pk>/status/", views.update_order_status, name="update_order_status"),
+    path("orders/<int:pk>/complete/", views.complete_order, name="complete_order"),
+    path("orders/<int:pk>/cancel/", views.cancel_order, name="cancel_order"),
 
     path("analytics/", views.analytics, name="analytics"),
     path("analytics/customer/", views.analytics_customer, name="analytics_customer"),
@@ -94,6 +98,7 @@ urlpatterns = [
     path("api/inventory/items/", views.api_inventory_items, name="api_inventory_items"),
     path("api/inventory/brands/", views.api_inventory_brands, name="api_inventory_brands"),
     path("api/inventory/stock/", views.api_inventory_stock, name="api_inventory_stock"),
+    path("api/inventory/create-item/", views.api_create_item_with_brand, name="api_create_item_with_brand"),
     path("api/brands/create/", views.create_brand, name="api_create_brand"),
     path("api/customers/<int:customer_id>/vehicles/", views.api_customer_vehicles, name="api_customer_vehicles"),
     # Notifications summary (canonical)
