@@ -44,8 +44,8 @@ urlpatterns = [
     path("analytics/", views.analytics, name="analytics"),
     path("analytics/customer/", views.analytics_customer, name="analytics_customer"),
     path("analytics/service/", views.analytics_service, name="analytics_service"),
-
-    # Temporarily route performance analytics to the main analytics page until the view is implemented
+    path("analytics/performance/", views.analytics_performance, name="analytics_performance"),
+    path("analytics/revenue/", views.analytics_revenue, name="analytics_revenue"),
    
 
     # Reports

@@ -160,14 +160,17 @@ class Order(models.Model):
         """Automatically move from created to in_progress after 10 minutes.
         Returns True if a change was made."""
         try:
-            if self.status == 'created' and self.created_at and timezone.now() - self.created_at >= timedelta(minutes=10):
-                self.status = 'in_progress'
-                if not self.started_at:
-                    self.started_at = timezone.now()
-                self.save(update_fields=['status', 'started_at'])
-                return True
-        except Exception:
-            pass
+            if self.status == 'created' and self.created_at:
+                time_elapsed = timezone.now() - self.created_at
+                if time_elapsed >= timedelta(minutes=10):
+                    self.status = 'in_progress'
+                    if not self.started_at:
+                        self.started_at = timezone.now()
+                    self.save(update_fields=['status', 'started_at'])
+                    return True
+        except Exception as e:
+            # Log the error for debugging
+            print(f"Error in auto_progress_if_elapsed: {e}")
         return False
 
     def save(self, *args, **kwargs):

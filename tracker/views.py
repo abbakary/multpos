@@ -93,16 +93,33 @@ def dashboard(request: HttpRequest):
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
         priority_counts = {x["priority"]: x["c"] for x in priority_counts_qs}
 
+        # Ensure all possible status values exist in status_counts (even if zero)
+        all_statuses = ["created", "in_progress", "completed", "cancelled"]
+        for status in all_statuses:
+            if status not in status_counts:
+                status_counts[status] = 0
+
         # Ensure we have a count for completed orders, even if it's zero
         completed_orders = Order.objects.filter(status="completed").count()
         completion_rate = (completed_orders / total_orders * 100) if total_orders > 0 else 0
         
         # Update status_counts to ensure 'completed' key exists
         status_counts['completed'] = completed_orders
+        
+        # Also count completed today for dashboard - check all completed orders for today
+        today_date = timezone.localdate()
+        
+        # Count completed orders by completed_at date (if set) or created_at date
+        completed_today_count = Order.objects.filter(
+            status="completed"
+        ).extra(
+            where=[
+                "(completed_at IS NOT NULL AND DATE(completed_at) = %s) OR (completed_at IS NULL AND DATE(created_at) = %s)"
+            ],
+            params=[today_date, today_date]
+        ).count()
 
-        # New customers this month - use current date
-        from datetime import date
-        today_date = date.today()
+        # New customers this month - use timezone-aware date
         new_customers_this_month = Customer.objects.filter(
             registration_date__year=today_date.year,
             registration_date__month=today_date.month,
@@ -161,6 +178,7 @@ def dashboard(request: HttpRequest):
         metrics = {
             'total_orders': total_orders,
             'completed_orders': completed_orders,  # Add this line to include completed orders count
+            'completed_today': completed_today_count,  # Add completed today count
             'total_customers': total_customers,
             'completion_rate': round(completion_rate, 1),
             'status_counts': status_counts,
@@ -186,15 +204,24 @@ def dashboard(request: HttpRequest):
     recent_orders = (
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
-    # Fix completed today calculation
+    # Fix completed today calculation - check all completed orders for today
     from datetime import date
     today = date.today()
+    
+    # Count completed orders by completed_at date (if set) or created_at date
     completed_today = Order.objects.filter(
-        status="completed", 
-        completed_at__date=today
+        status="completed"
+    ).extra(
+        where=[
+            "(completed_at IS NOT NULL AND DATE(completed_at) = %s) OR (completed_at IS NULL AND DATE(created_at) = %s)"
+        ],
+        params=[today, today]
     ).count()
 
-    context = {**metrics, "recent_orders": recent_orders, "completed_today": completed_today, "current_time": timezone.now()}
+    # Use completed_today from metrics if available, otherwise calculate fresh
+    completed_today_final = metrics.get('completed_today', completed_today)
+    
+    context = {**metrics, "recent_orders": recent_orders, "completed_today": completed_today_final, "current_time": timezone.now()}
     # render after charts
 
     # Build sales_chart_json (monthly Orders vs Completed for last 12 months)
@@ -2265,6 +2292,9 @@ def complete_order(request: HttpRequest, pk: int):
     o.completed_at = now
     if o.started_at:
         o.actual_duration = int((now - o.started_at).total_seconds() // 60)
+    else:
+        # If started_at is not set, calculate from created_at
+        o.actual_duration = int((now - o.created_at).total_seconds() // 60)
 
     if o.type == 'sales' and (o.quantity or 0) > 0 and o.item_name and o.brand:
         from .utils import adjust_inventory
@@ -2306,6 +2336,10 @@ def cancel_order(request: HttpRequest, pk: int):
 def analytics(request: HttpRequest):
     """Analytics page summarizing orders by period with four statuses only."""
     from datetime import timedelta
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate, ExtractHour, ExtractMonth
+    import json
+    
     period = request.GET.get('period', 'monthly')
 
     today = timezone.localdate()
@@ -2326,7 +2360,7 @@ def analytics(request: HttpRequest):
         end_date = today
         labels = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(30)]
 
-    qs = Order.objects.filter(created_at__date__range=[start_date, end_date])
+    qs = Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
     status_counts = {row['status']: row['c'] for row in qs.values('status').annotate(c=Count('id'))}
     type_counts = {row['type']: row['c'] for row in qs.values('type').annotate(c=Count('id'))}
     priority_counts = {row['priority']: row['c'] for row in qs.values('priority').annotate(c=Count('id'))}
@@ -2341,7 +2375,7 @@ def analytics(request: HttpRequest):
         by_date = {row['day']: row['c'] for row in qs.annotate(day=TruncDate('created_at')).values('day').annotate(c=Count('id'))}
         trend_values = []
         for i in range(7):
-            d = start_date + timezone.timedelta(days=i)
+            d = start_date + timedelta(days=i)
             trend_values.append(by_date.get(d, 0))
         trend_labels = labels
     elif period == 'yearly':
@@ -2353,7 +2387,7 @@ def analytics(request: HttpRequest):
         by_date = {row['day']: row['c'] for row in qs.annotate(day=TruncDate('created_at')).values('day').annotate(c=Count('id'))}
         trend_values = []
         for i in range(30):
-            d = start_date + timezone.timedelta(days=i)
+            d = start_date + timedelta(days=i)
             trend_values.append(by_date.get(d, 0))
         trend_labels = labels
 
@@ -2405,18 +2439,23 @@ def analytics(request: HttpRequest):
 
 @login_required
 def reports(request: HttpRequest):
+    from datetime import date, timedelta
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+    import json
+    
     f_from = request.GET.get("from")
     f_to = request.GET.get("to")
     f_type = request.GET.get("type", "all")
     period = request.GET.get("period", "")
     # If no explicit range provided, derive from period
-    today = timezone.localdate()
+    today = date.today()
     if (not f_from or not f_to) and period:
         if period == 'daily':
             f_from = f_from or today.isoformat()
             f_to = f_to or today.isoformat()
         elif period == 'weekly':
-            start = today - timezone.timedelta(days=6)
+            start = today - timedelta(days=6)
             f_from = f_from or start.isoformat()
             f_to = f_to or today.isoformat()
         elif period == 'yearly':
@@ -2424,18 +2463,34 @@ def reports(request: HttpRequest):
             f_from = f_from or start.isoformat()
             f_to = f_to or today.isoformat()
         else:  # monthly default (last 30 days)
-            start = today - timezone.timedelta(days=29)
+            start = today - timedelta(days=29)
             f_from = f_from or start.isoformat()
             f_to = f_to or today.isoformat()
     qs = Order.objects.select_related("customer").order_by("-created_at")
     if f_from:
         try:
-            qs = qs.filter(created_at__date__gte=f_from)
+            from datetime import datetime
+            # Try multiple date formats
+            for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y']:
+                try:
+                    start_date = datetime.strptime(f_from, fmt).date()
+                    qs = qs.filter(created_at__date__gte=start_date)
+                    break
+                except ValueError:
+                    continue
         except Exception:
             pass
     if f_to:
         try:
-            qs = qs.filter(created_at__date__lte=f_to)
+            from datetime import datetime
+            # Try multiple date formats
+            for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y']:
+                try:
+                    end_date = datetime.strptime(f_to, fmt).date()
+                    qs = qs.filter(created_at__date__lte=end_date)
+                    break
+                except ValueError:
+                    continue
         except Exception:
             pass
     if f_type and f_type != "all":
@@ -2443,28 +2498,17 @@ def reports(request: HttpRequest):
 
     total = qs.count()
     by_status = dict(qs.values_list("status").annotate(c=Count("id")))
-    # Completed orders should be from the same base queryset to ensure date range consistency
-    completed_qs = qs.filter(status="completed")
-    if f_from:
-        try:
-            completed_qs = completed_qs.filter(completed_at__date__gte=f_from)
-        except Exception:
-            pass
-    if f_to:
-        try:
-            completed_qs = completed_qs.filter(completed_at__date__lte=f_to)
-        except Exception:
-            pass
+    # Get completed orders count from the same filtered queryset
+    completed_count = by_status.get("completed", 0)
 
     stats = {
         "total": total,
-        "completed": completed_qs.filter(status="completed").count(),
+        "completed": completed_count,
         "in_progress": by_status.get("in_progress", 0) + by_status.get("created", 0),
         "cancelled": by_status.get("cancelled", 0),
     }
 
     # Charts (trend/status/type) for selected range
-    from django.db.models.functions import TruncDate
     trend_map = {row['day']: row['c'] for row in qs.annotate(day=TruncDate('created_at')).values('day').annotate(c=Count('id'))}
     labels = []
     values = []
@@ -2994,19 +3038,24 @@ def api_notifications_summary(request: HttpRequest):
     stock_threshold = int(request.GET.get('stock_threshold', 5) or 5)
     overdue_hours = int(request.GET.get('overdue_hours', 24) or 24)
 
-    from datetime import date
-    today_date = date.today()
+    # Use timezone-aware date for consistency
+    today_date = timezone.localdate()
     now = timezone.now()
     cutoff = now - timedelta(hours=overdue_hours)
 
-    # Today's visitors (arrival_time today)
-    todays_qs = Customer.objects.filter(arrival_time__date=today_date).order_by('-arrival_time')
+    # Today's visitors (customers who registered today OR have orders today)
+    from django.db.models import Q
+    todays_qs = Customer.objects.filter(
+        Q(registration_date__date=today_date) | 
+        Q(orders__created_at__date=today_date)
+    ).distinct().order_by('-registration_date')
     todays_count = todays_qs.count()
     todays = [{
         'id': c.id,
         'name': c.full_name,
         'code': c.code,
-        'time': c.arrival_time.isoformat() if c.arrival_time else None
+        'time': c.registration_date.isoformat() if c.registration_date else None,
+        'type': 'new_customer' if c.registration_date and c.registration_date.date() == today_date else 'returning_customer'
     } for c in todays_qs[:8]]
 
     # Low stock items
@@ -3822,6 +3871,9 @@ def update_inquiry_status(request: HttpRequest, pk: int):
 def reports_advanced(request: HttpRequest):
     """Advanced reports with period and type filters"""
     from datetime import timedelta, datetime, time as dt_time
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate, ExtractHour, ExtractMonth
+    import json
 
     period = request.GET.get('period', 'monthly')
     report_type = request.GET.get('type', 'overview')
@@ -4108,13 +4160,159 @@ def backup_restore(request: HttpRequest):
 
 @login_required
 def analytics_performance(request: HttpRequest):
-    """Temporary stub view to satisfy URL mapping; can be expanded later."""
-    # Reuse the main analytics view output for now
-    return analytics(request)
+    """Performance analytics page with detailed metrics."""
+    from datetime import timedelta
+    from django.db.models import Count, Avg
+    from django.db.models.functions import TruncDate
+    import json
+    
+    period = request.GET.get('period', 'monthly')
+    today = timezone.localdate()
+    
+    # Calculate date range
+    if period == 'daily':
+        start_date = today
+        end_date = today
+    elif period == 'weekly':
+        start_date = today - timedelta(days=6)
+        end_date = today
+    elif period == 'yearly':
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    else:  # monthly
+        start_date = today - timedelta(days=29)
+        end_date = today
+    
+    # Get orders in the period
+    qs = Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+    
+    # Performance metrics
+    total_orders = qs.count()
+    completed_orders = qs.filter(status='completed').count()
+    completion_rate = (completed_orders / total_orders * 100) if total_orders > 0 else 0
+    
+    # Average completion time
+    avg_completion_time = qs.filter(
+        status='completed',
+        completed_at__isnull=False,
+        started_at__isnull=False
+    ).aggregate(
+        avg_time=Avg('actual_duration')
+    )['avg_time'] or 0
+    
+    # Orders by priority
+    priority_counts = {row['priority']: row['c'] for row in qs.values('priority').annotate(c=Count('id'))}
+    
+    # Performance over time
+    performance_trend = []
+    if period == 'daily':
+        for hour in range(24):
+            count = qs.filter(created_at__hour=hour).count()
+            performance_trend.append({'hour': f"{hour:02d}:00", 'count': count})
+    else:
+        for i in range((end_date - start_date).days + 1):
+            date = start_date + timedelta(days=i)
+            count = qs.filter(created_at__date=date).count()
+            performance_trend.append({'date': date.strftime('%Y-%m-%d'), 'count': count})
+    
+    charts = {
+        'priority': {
+            'labels': ['Low', 'Medium', 'High', 'Urgent'],
+            'values': [
+                priority_counts.get('low', 0),
+                priority_counts.get('medium', 0),
+                priority_counts.get('high', 0),
+                priority_counts.get('urgent', 0),
+            ]
+        },
+        'trend': {
+            'labels': [item['hour'] if 'hour' in item else item['date'] for item in performance_trend],
+            'values': [item['count'] for item in performance_trend]
+        }
+    }
+    
+    totals = {
+        'total_orders': total_orders,
+        'completed_orders': completed_orders,
+        'completion_rate': round(completion_rate, 1),
+        'avg_completion_time': round(avg_completion_time, 1) if avg_completion_time else 0,
+    }
+    
+    return render(request, 'tracker/analytics_performance.html', {
+        'charts_json': json.dumps(charts),
+        'totals': totals,
+        'period': period,
+        'export_from': start_date.isoformat(),
+        'export_to': end_date.isoformat(),
+    })
+
+@login_required
+def analytics_revenue(request: HttpRequest):
+    """Revenue analytics page - placeholder for future revenue tracking."""
+    from datetime import timedelta
+    from django.db.models import Count
+    import json
+    
+    period = request.GET.get('period', 'monthly')
+    today = timezone.localdate()
+    
+    # Calculate date range
+    if period == 'daily':
+        start_date = today
+        end_date = today
+    elif period == 'weekly':
+        start_date = today - timedelta(days=6)
+        end_date = today
+    elif period == 'yearly':
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    else:  # monthly
+        start_date = today - timedelta(days=29)
+        end_date = today
+    
+    # Get orders in the period
+    qs = Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+    
+    # Revenue metrics (placeholder - would need actual pricing data)
+    total_orders = qs.count()
+    completed_orders = qs.filter(status='completed').count()
+    
+    # Orders by type for revenue potential
+    type_counts = {row['type']: row['c'] for row in qs.values('type').annotate(c=Count('id'))}
+    
+    charts = {
+        'type': {
+            'labels': ['Service', 'Sales', 'Consultation'],
+            'values': [
+                type_counts.get('service', 0),
+                type_counts.get('sales', 0),
+                type_counts.get('consultation', 0),
+            ]
+        }
+    }
+    
+    totals = {
+        'total_orders': total_orders,
+        'completed_orders': completed_orders,
+        'revenue_potential': completed_orders * 100,  # Placeholder calculation
+    }
+    
+    return render(request, 'tracker/analytics_revenue.html', {
+        'charts_json': json.dumps(charts),
+        'totals': totals,
+        'period': period,
+        'export_from': start_date.isoformat(),
+        'export_to': end_date.isoformat(),
+    })
 
 @login_required
 def analytics_customer(request: HttpRequest):
     """Customer analytics page with period filters and charts"""
+    from datetime import date, timedelta
+    from django.db.models import Count, Max
+    from django.db.models.functions import TruncDate
+    import json
+    
     # Filters: from/to or period
     f_from = request.GET.get("from")
     f_to = request.GET.get("to")
@@ -4140,12 +4338,16 @@ def analytics_customer(request: HttpRequest):
     qs = Customer.objects.all()
     if f_from:
         try:
-            qs = qs.filter(registration_date__date__gte=f_from)
+            from datetime import datetime
+            start_date = datetime.strptime(f_from, '%Y-%m-%d').date()
+            qs = qs.filter(registration_date__date__gte=start_date)
         except Exception:
             pass
     if f_to:
         try:
-            qs = qs.filter(registration_date__date__lte=f_to)
+            from datetime import datetime
+            end_date = datetime.strptime(f_to, '%Y-%m-%d').date()
+            qs = qs.filter(registration_date__date__lte=end_date)
         except Exception:
             pass
 
@@ -4242,6 +4444,10 @@ def analytics_customer(request: HttpRequest):
 def analytics_service(request: HttpRequest):
     """Service analytics using real Order data (sales/service/consultation)."""
     from datetime import datetime
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate, Lower, Trim
+    import json
+    
     # Filters
     f_from = request.GET.get("from")
     f_to = request.GET.get("to")
@@ -4276,7 +4482,7 @@ def analytics_service(request: HttpRequest):
     start_date = parse_d(f_from) or today
     end_date = parse_d(f_to) or today
 
-    # Query base within created_at date range
+    # Query base within created_at date range - ensure proper date filtering
     qs = Order.objects.all().select_related("customer")
     qs = qs.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
 
