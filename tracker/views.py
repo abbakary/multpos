@@ -2004,6 +2004,14 @@ def orders_list(request: HttpRequest):
     paginator = Paginator(orders, 20)
     page = request.GET.get('page')
     orders = paginator.get_page(page)
+    # Mark overdue orders for display without persisting to DB
+    try:
+        _cutoff = timezone.now() - timedelta(hours=24)
+        for _o in orders:
+            if _o.status in ("created","in_progress") and _o.created_at and _o.created_at < _cutoff:
+                _o.status = "overdue"
+    except Exception:
+        pass
     return render(request, "tracker/orders_list.html", {
         "orders": orders,
         "status": status,
