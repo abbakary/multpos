@@ -53,6 +53,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Visual highlight
                 document.querySelectorAll('.intent-card').forEach(function(c){ c.classList.remove('border-primary'); });
                 intentCard.classList.add('border-primary');
+                // Auto-save intent selection to session without navigation
+                var form = document.getElementById('customer-registration-form') || document.getElementById('customerRegistrationForm');
+                if (form) {
+                    var fd = new FormData(form);
+                    fetch(form.action || window.location.href, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'same-origin'
+                    }).catch(function(){ /* ignore */ });
+                }
             }
         }
 
@@ -64,6 +75,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 cb.checked = !cb.checked;
                 svcLabel.classList.toggle('border-primary', cb.checked);
                 svcLabel.classList.toggle('bg-light', cb.checked);
+            }
+        }
+
+        // Step 3: Service type radio card selection handler (if cards are used)
+        var svcTypeCard = e.target.closest('.service-card');
+        if (svcTypeCard) {
+            var radio2 = svcTypeCard.querySelector('input[name="service_type"]');
+            if (radio2) {
+                radio2.checked = true;
+                document.querySelectorAll('.service-card').forEach(function(c){ c.classList.remove('border-primary','bg-light'); });
+                svcTypeCard.classList.add('border-primary','bg-light');
+                // Auto-save service_type selection
+                var form2 = document.getElementById('customer-registration-form') || document.getElementById('customerRegistrationForm');
+                if (form2) {
+                    var fd2 = new FormData(form2);
+                    fetch(form2.action || window.location.href, {
+                        method: 'POST',
+                        body: fd2,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'same-origin'
+                    }).catch(function(){ /* ignore */ });
+                }
             }
         }
 
@@ -110,9 +143,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 
                                 // Update URL with current step
                                 const url = new URL(window.location);
-                                const newStep = data.next_step || currentStep + 1;
+                                const newStep = (typeof data.next_step !== 'undefined' && data.next_step !== null) ? parseInt(data.next_step) : (currentStep + 1);
                                 url.searchParams.set('step', newStep);
-                                
+
                                 // Update browser history without page reload
                                 window.history.pushState({ step: newStep }, '', url);
                                 

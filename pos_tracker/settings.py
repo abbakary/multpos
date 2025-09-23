@@ -42,6 +42,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "tracker.middleware.TimezoneMiddleware",  # Add our custom timezone middleware
+    "tracker.middleware.AutoProgressOrdersMiddleware",  # Auto-progress orders without user interaction
 ]
 
 ROOT_URLCONF = "pos_tracker.urls"
@@ -57,6 +58,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "tracker.context_processors.header_notifications",
             ],
         },
     },
