@@ -157,13 +157,25 @@
                         </div>
                         <div class="progress-container">
                             <div class="progress-label">
+                                <span>Overdue</span>
+                                <span>{{ status_counts.overdue|default:0 }} ({{ status_percentages.overdue_percent|floatformat:0 }}%)</span>
+                            </div>
+                            <div class="progress dashboard-progress">
+                                <div class="progress-bar overdue" role="progressbar"
+                                     data-width="{{ status_percentages.overdue_percent|floatformat:0 }}"
+                                     aria-valuenow="{{ status_counts.overdue|default:0 }}"
+                                     aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
+                            </div>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-label">
                                 <span>Cancelled</span>
                                 <span>{{ status_counts.cancelled|default:0 }} ({{ status_percentages.cancelled_percent|floatformat:0 }}%)</span>
                             </div>
                             <div class="progress dashboard-progress">
-                                <div class="progress-bar cancelled" role="progressbar" 
-                                     data-width="{{ status_percentages.cancelled_percent|floatformat:0 }}" 
-                                     aria-valuenow="{{ status_counts.cancelled|default:0 }}" 
+                                <div class="progress-bar cancelled" role="progressbar"
+                                     data-width="{{ status_percentages.cancelled_percent|floatformat:0 }}"
+                                     aria-valuenow="{{ status_counts.cancelled|default:0 }}"
                                      aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
                             </div>
                         </div>
