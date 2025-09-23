@@ -160,10 +160,10 @@
                   var container2 = document.getElementById('registrationWizard'); if(container2){ container2.innerHTML = data.form_html; bindWizard(); }
                   return;
                 }
-                // Otherwise explicitly load next step
+                // Otherwise explicitly load next step (honor next_step if provided)
                 var cur = parseInt((document.getElementById('currentStep')||{value:1}).value||1,10);
-                var next = Math.min(cur+1,4);
-                loadStep(next);
+                var target = (data && data.next_step) ? parseInt(data.next_step,10) : Math.min(cur+1,4);
+                loadStep(target);
               }catch(err){ console.error('Error handling next response', err); }
             }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); });
           }catch(err){ console.error('Next click handler error', err); }
@@ -197,13 +197,14 @@
 
     // Next from step 2
     var next2 = document.getElementById('nextStep2');
-    if(next2){ if(!next2.dataset.bound){ next2.dataset.bound='1'; next2.addEventListener('click', function(e){ e.preventDefault(); ajaxPostForm(form, function(data){ try{ if(data && data.form_html && (!data.success)){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } if(data && data.form_html && data.success){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } var cur = parseInt((document.getElementById('currentStep')||{value:2}).value||2,10); var next = Math.min(cur+1,4); loadStep(next); }catch(err){ console.error('Error handling step2 response', err); } }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); }); }}
+    if(next2){ if(!next2.dataset.bound){ next2.dataset.bound='1'; next2.addEventListener('click', function(e){ e.preventDefault(); ajaxPostForm(form, function(data){ try{ if(data && data.form_html && (!data.success)){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } if(data && data.form_html && data.success){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } var cur = parseInt((document.getElementById('currentStep')||{value:2}).value||2,10); var target = (data && data.next_step) ? parseInt(data.next_step,10) : Math.min(cur+1,4); loadStep(target); }catch(err){ console.error('Error handling step2 response', err); } }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); }); }}
 
     // Next from step3
     var next3 = document.getElementById('nextServiceBtn');
-    if(next3){ if(!next3.dataset.bound){ next3.dataset.bound='1'; next3.addEventListener('click', function(e){ e.preventDefault(); ajaxPostForm(form, function(data){ try{ if(data && data.form_html && (!data.success)){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } if(data && data.form_html && data.success){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } var cur = parseInt((document.getElementById('currentStep')||{value:3}).value||3,10); var next = Math.min(cur+1,4); loadStep(next); }catch(err){ console.error('Error handling step3 response', err); } }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); }); }}
+    if(next3){ if(!next3.dataset.bound){ next3.dataset.bound='1'; next3.addEventListener('click', function(e){ e.preventDefault(); ajaxPostForm(form, function(data){ try{ if(data && data.form_html && (!data.success)){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } if(data && data.form_html && data.success){ document.getElementById('registrationWizard').innerHTML = data.form_html; bindWizard(); return; } var cur = parseInt((document.getElementById('currentStep')||{value:3}).value||3,10); var target = (data && data.next_step) ? parseInt(data.next_step,10) : Math.min(cur+1,4); loadStep(target); }catch(err){ console.error('Error handling step3 response', err); } }, function(err){ console.error('AJAX error', err); alert('Request failed: ' + err); }); }); }}
 
     // Intent and service selection visual toggles (avoid relying on global event)
+    var __autoSaveTimer = null;
     window.selectIntent = function(intentValue){
       document.querySelectorAll('.intent-card').forEach(function(card){ card.classList.remove('border-primary','bg-light'); });
       try{
@@ -212,6 +213,13 @@
         if(card) card.classList.add('border-primary','bg-light');
         if(radio) radio.checked = true;
         var next2btn = document.getElementById('nextStep2'); if(next2btn) next2btn.disabled = false;
+        // Auto-save selection to server session without navigating
+        clearTimeout(__autoSaveTimer);
+        __autoSaveTimer = setTimeout(function(){
+          var f = document.getElementById('customerRegistrationForm');
+          if(!f) return;
+          ajaxPostForm(f, function(){ /* no-op on purpose */ }, function(){ /* ignore */ });
+        }, 250);
       }catch(e){ console.error('selectIntent error', e); }
     };
 
@@ -223,6 +231,13 @@
         if(card) card.classList.add('border-primary','bg-light');
         if(radio) radio.checked = true;
         var next3btn = document.getElementById('nextServiceBtn'); if(next3btn) next3btn.disabled = false;
+        // Auto-save selection to server session without navigating
+        clearTimeout(__autoSaveTimer);
+        __autoSaveTimer = setTimeout(function(){
+          var f = document.getElementById('customerRegistrationForm');
+          if(!f) return;
+          ajaxPostForm(f, function(){ /* no-op on purpose */ }, function(){ /* ignore */ });
+        }, 250);
       }catch(e){ console.error('selectServiceType error', e); }
     };
 
