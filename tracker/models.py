@@ -109,7 +109,7 @@ class Vehicle(models.Model):
 class Order(models.Model):
     TYPE_CHOICES = [("service", "Service"), ("sales", "Sales"), ("consultation", "Inquiries")]
     STATUS_CHOICES = [
-        ("created", "Created"),
+        ("created", "Start"),
         ("in_progress", "In Progress"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
