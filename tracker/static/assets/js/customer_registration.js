@@ -78,6 +78,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Step 3: Service type radio card selection handler (if cards are used)
+        var svcTypeCard = e.target.closest('.service-card');
+        if (svcTypeCard) {
+            var radio2 = svcTypeCard.querySelector('input[name="service_type"]');
+            if (radio2) {
+                radio2.checked = true;
+                document.querySelectorAll('.service-card').forEach(function(c){ c.classList.remove('border-primary','bg-light'); });
+                svcTypeCard.classList.add('border-primary','bg-light');
+                // Auto-save service_type selection
+                var form2 = document.getElementById('customer-registration-form') || document.getElementById('customerRegistrationForm');
+                if (form2) {
+                    var fd2 = new FormData(form2);
+                    fetch(form2.action || window.location.href, {
+                        method: 'POST',
+                        body: fd2,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'same-origin'
+                    }).catch(function(){ /* ignore */ });
+                }
+            }
+        }
+
         // Generic: Next buttons inside steps may be type="button"; submit form to advance
         var nextBtnIds = ['nextStepBtn','nextStep2','nextServiceBtn'];
         var clickedId = (e.target && e.target.id) || (e.target.closest('button') && e.target.closest('button').id) || '';
