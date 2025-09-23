@@ -330,8 +330,8 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-soft-{% if order.status == 'completed' %}success{% elif order.status == 'in_progress' %}warning{% elif order.status == 'created' %}info{% else %}secondary{% endif %} text-{% if order.status == 'completed' %}success{% elif order.status == 'in_progress' %}warning{% elif order.status == 'created' %}info{% else %}secondary{% endif %} p-2">
-                                        <i class="fa fa-{% if order.status == 'completed' %}check-circle{% elif order.status == 'in_progress' %}spinner fa-spin{% elif order.status == 'created' %}clock{% else %}ellipsis-h{% endif %} me-1"></i>
+                                    <span class="badge bg-soft-{% if order.status == 'completed' %}success{% elif order.status == 'in_progress' %}warning{% elif order.status == 'created' %}info{% elif order.status == 'overdue' %}danger{% else %}secondary{% endif %} text-{% if order.status == 'completed' %}success{% elif order.status == 'in_progress' %}warning{% elif order.status == 'created' %}info{% elif order.status == 'overdue' %}danger{% else %}secondary{% endif %} p-2">
+                                        <i class="fa fa-{% if order.status == 'completed' %}check-circle{% elif order.status == 'in_progress' %}spinner fa-spin{% elif order.status == 'created' %}clock{% elif order.status == 'overdue' %}exclamation-triangle{% else %}ellipsis-h{% endif %} me-1"></i>
                                         {{ order.get_status_display }}
                                     </span>
                                 </td>
