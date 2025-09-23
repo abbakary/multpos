@@ -2001,7 +2001,7 @@ def orders_list(request: HttpRequest):
     # Get counts for stats
     total_orders = Order.objects.count()
     pending_orders = Order.objects.filter(status="created").count()
-    active_orders = Order.objects.filter(status__in=["created", "in_progress"]).count()
+    active_orders = Order.objects.filter(status__in=["created", "in_progress", "overdue"]).count()
     completed_today = Order.objects.filter(status="completed", completed_at__date=timezone.localdate()).count()
     urgent_orders = Order.objects.filter(priority="urgent").count()
     revenue_today = 0
