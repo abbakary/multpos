@@ -250,7 +250,7 @@
       }
 
       // Update the notification dropdown content
-      var bar = document.querySelector('.notification-dropdown .notitications-bar');
+      var bar = document.querySelector('.notification-dropdown .notitications-bar') || document.querySelector('.notification-dropdown .notifications-bar') || document.querySelector('.notification-dropdown .notifications-list');
       if(!bar) return;
       
       function fmtTime(iso){ try{ var d=new Date(iso); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch(e){return ''} }
@@ -264,8 +264,8 @@
       function orderUrl(id){ return ("/orders/"+id+"/"); }
       
       var html = ''+
-        '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Today\'s Visitors</span><span class="badge bg-primary">'+ ((data.counts && data.counts.today_visitors)||0) +'</span></div>'+
-        '<ul class="list-unstyled mb-3">'+ (t.length > 0 ? t.map(function(x){ return '<li class="mb-1"><a class="f-light f-w-500" href="'+ custUrl(x.id) +'">'+ x.name +'</a> <span class="f-12 text-muted">'+ fmtTime(x.time) +'</span></li>'; }).join('') : '<li class="text-muted f-12">No recent visitors</li>') +'</ul>'+
+        '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Today\'s Customers</span><span class="badge bg-primary">'+ ((data.counts && data.counts.today_visitors)||0) +'</span></div>'+
+        '<ul class="list-unstyled mb-3">'+ (t.length > 0 ? t.map(function(x){ return '<li class="mb-1"><a class="f-light f-w-500" href="'+ custUrl(x.id) +'">'+ x.name +'</a> <span class="f-12 text-muted">'+ fmtTime(x.time) +'</span></li>'; }).join('') : '<li class="text-muted f-12">No customers today</li>') +'</ul>'+
         '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Low Stock</span><span class="badge bg-warning text-dark">'+ ((data.counts && data.counts.low_stock)||0) +'</span></div>'+
         '<ul class="list-unstyled mb-3">'+ (l.length > 0 ? l.map(function(x){ return '<li class="mb-1"><span class="f-light f-w-500">'+ x.name +' ('+ (x.brand||'Unbranded') +')</span> <span class="badge bg-light text-dark">'+ x.quantity +'</span></li>'; }).join('') : '<li class="text-muted f-12">No low stock items</li>') +'</ul>'+
         '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Overdue Orders</span><span class="badge bg-danger">'+ ((data.counts && data.counts.overdue_orders)||0) +'</span></div>'+
