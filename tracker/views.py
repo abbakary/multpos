@@ -30,6 +30,14 @@ from datetime import datetime, timedelta
 from django.contrib.auth.views import LogoutView
 from django.views.generic import View
 
+
+def _mark_overdue_orders(hours=24):
+    try:
+        cutoff = timezone.now() - timedelta(hours=hours)
+        Order.objects.filter(status__in=["created","in_progress"], created_at__lt=cutoff).update(status="overdue")
+    except Exception:
+        pass
+
 class CustomLoginView(LoginView):
     template_name = "registration/login.html"
 
@@ -75,6 +83,8 @@ class CustomLogoutView(LogoutView):
 
 @login_required
 def dashboard(request: HttpRequest):
+    # Normalize statuses before computing metrics
+    _mark_overdue_orders(hours=24)
     # Always calculate fresh metrics for accurate data
     today = timezone.localdate()
     
@@ -93,10 +103,9 @@ def dashboard(request: HttpRequest):
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
         priority_counts = {x["priority"]: x["c"] for x in priority_counts_qs}
 
-        # Derive overdue count: not completed and older than 24 hours
+        # Count persisted overdue
         try:
-            overdue_cutoff = timezone.now() - timedelta(hours=24)
-            overdue_count = Order.objects.filter(status__in=["created","in_progress"], created_at__lt=overdue_cutoff).count()
+            overdue_count = Order.objects.filter(status="overdue").count()
             status_counts["overdue"] = overdue_count
         except Exception:
             status_counts.setdefault("overdue", 0)
@@ -213,14 +222,6 @@ def dashboard(request: HttpRequest):
     recent_orders = list(
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
-    # Mark overdue orders for display without persisting to DB
-    try:
-        _overdue_cutoff = timezone.now() - timedelta(hours=24)
-        for _o in recent_orders:
-            if _o.status in ("created","in_progress") and _o.created_at and _o.created_at < _overdue_cutoff:
-                _o.status = "overdue"
-    except Exception:
-        pass
     # Fix completed today calculation - check all completed orders for today
     from datetime import date
     today = date.today()
@@ -1954,7 +1955,10 @@ def customer_groups_data(request: HttpRequest):
 @login_required
 def orders_list(request: HttpRequest):
     from django.db.models import Q, Sum
-    
+
+    # Persist overdue statuses before listing
+    _mark_overdue_orders(hours=24)
+
     # Get timezone from cookie or use default
     tzname = request.COOKIES.get('django_timezone')
     
@@ -2005,14 +2009,6 @@ def orders_list(request: HttpRequest):
     paginator = Paginator(orders, 20)
     page = request.GET.get('page')
     orders = paginator.get_page(page)
-    # Mark overdue orders for display without persisting to DB
-    try:
-        _cutoff = timezone.now() - timedelta(hours=24)
-        for _o in orders:
-            if _o.status in ("created","in_progress") and _o.created_at and _o.created_at < _cutoff:
-                _o.status = "overdue"
-    except Exception:
-        pass
     return render(request, "tracker/orders_list.html", {
         "orders": orders,
         "status": status,
@@ -3059,6 +3055,9 @@ def api_notifications_summary(request: HttpRequest):
     stock_threshold = int(request.GET.get('stock_threshold', 5) or 5)
     overdue_hours = int(request.GET.get('overdue_hours', 24) or 24)
 
+    # Normalize statuses once per request
+    _mark_overdue_orders(hours=overdue_hours)
+
     # Use timezone-aware date for consistency
     today_date = timezone.localdate()
     now = timezone.now()
@@ -3089,9 +3088,13 @@ def api_notifications_summary(request: HttpRequest):
         'quantity': i.quantity
     } for i in low_qs[:8]]
 
-    # Overdue orders (not completed, older than cutoff)
-    overdue_qs = Order.objects.filter(status__in=['created','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
+    # Overdue orders (persisted or derived for safety)
+    overdue_qs = Order.objects.filter(status='overdue').select_related('customer').order_by('created_at')
     overdue_count = overdue_qs.count()
+    if overdue_count == 0:
+        # Fallback derivation in case normalization skipped
+        overdue_qs = Order.objects.filter(status__in=['created','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
+        overdue_count = overdue_qs.count()
     def age_minutes(dt):
         return int((now - dt).total_seconds() // 60) if dt else None
     overdue = [{
