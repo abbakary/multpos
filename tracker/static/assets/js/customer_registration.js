@@ -121,9 +121,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 
                                 // Update URL with current step
                                 const url = new URL(window.location);
-                                const newStep = data.next_step || currentStep + 1;
+                                const newStep = (typeof data.next_step !== 'undefined' && data.next_step !== null) ? parseInt(data.next_step) : (currentStep + 1);
                                 url.searchParams.set('step', newStep);
-                                
+
                                 // Update browser history without page reload
                                 window.history.pushState({ step: newStep }, '', url);
                                 
