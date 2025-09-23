@@ -2243,23 +2243,10 @@ def order_detail(request: HttpRequest, pk: int):
 
 @login_required
 def update_order_status(request: HttpRequest, pk: int):
-    """Allow only transitioning an order to in_progress (start). Completion and
-    cancellation are handled by dedicated endpoints."""
+    """Manual status transitions to in_progress are disabled; progression is automatic.
+    Use complete_order or cancel_order endpoints for finalization."""
     o = get_object_or_404(Order, pk=pk)
-    if request.method == 'POST':
-        status = request.POST.get("status")
-        if status == "in_progress" and o.status in ["created", "in_progress"]:
-            if not o.started_at:
-                o.started_at = timezone.now()
-            o.status = "in_progress"
-            o.save(update_fields=["status", "started_at"])
-            try:
-                add_audit_log(request.user, 'order_status_update', f"Order {o.order_number}: set to in_progress")
-            except Exception:
-                pass
-            messages.success(request, "Order started and set to In Progress")
-        else:
-            messages.error(request, "Invalid status change. Use Complete or Cancel actions for finalization.")
+    messages.error(request, "Order status to In Progress is managed automatically after 10 minutes. Use Complete or Cancel for final steps.")
     return redirect("tracker:order_detail", pk=o.id)
 
 
