@@ -2526,7 +2526,7 @@ def reports(request: HttpRequest):
 
     charts = {
         'status': {
-            'labels': ['Created','In Progress','Completed','Cancelled'],
+            'labels': ['Start','In Progress','Completed','Cancelled'],
             'values': [
                 by_status.get('created',0),
                 by_status.get('in_progress',0),
