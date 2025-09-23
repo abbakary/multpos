@@ -93,8 +93,16 @@ def dashboard(request: HttpRequest):
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
         priority_counts = {x["priority"]: x["c"] for x in priority_counts_qs}
 
+        # Derive overdue count: not completed and older than 24 hours
+        try:
+            overdue_cutoff = timezone.now() - timedelta(hours=24)
+            overdue_count = Order.objects.filter(status__in=["created","in_progress"], created_at__lt=overdue_cutoff).count()
+            status_counts["overdue"] = overdue_count
+        except Exception:
+            status_counts.setdefault("overdue", 0)
+
         # Ensure all possible status values exist in status_counts (even if zero)
-        all_statuses = ["created", "in_progress", "completed", "cancelled"]
+        all_statuses = ["created", "in_progress", "overdue", "completed", "cancelled"]
         for status in all_statuses:
             if status not in status_counts:
                 status_counts[status] = 0
@@ -201,9 +209,17 @@ def dashboard(request: HttpRequest):
         # cache.set(cache_key, metrics, 60)
 
     # Always fresh data for fast-updating sections
-    recent_orders = (
+    recent_orders = list(
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
+    # Mark overdue orders for display without persisting to DB
+    try:
+        _overdue_cutoff = timezone.now() - timedelta(hours=24)
+        for _o in recent_orders:
+            if _o.status in ("created","in_progress") and _o.created_at and _o.created_at < _overdue_cutoff:
+                _o.status = "overdue"
+    except Exception:
+        pass
     # Fix completed today calculation - check all completed orders for today
     from datetime import date
     today = date.today()
