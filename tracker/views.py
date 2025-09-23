@@ -1966,7 +1966,10 @@ def orders_list(request: HttpRequest):
     orders = Order.objects.select_related("customer", "vehicle").order_by("-created_at")
 
     # Apply filters
-    if status != "all":
+    if status == "overdue":
+        cutoff = timezone.now() - timedelta(hours=24)
+        orders = orders.filter(status__in=["created","in_progress"], created_at__lt=cutoff)
+    elif status != "all":
         orders = orders.filter(status=status)
     if type_filter != "all":
         orders = orders.filter(type=type_filter)
