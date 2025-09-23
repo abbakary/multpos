@@ -53,6 +53,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Visual highlight
                 document.querySelectorAll('.intent-card').forEach(function(c){ c.classList.remove('border-primary'); });
                 intentCard.classList.add('border-primary');
+                // Auto-save intent selection to session without navigation
+                var form = document.getElementById('customer-registration-form') || document.getElementById('customerRegistrationForm');
+                if (form) {
+                    var fd = new FormData(form);
+                    fetch(form.action || window.location.href, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCookie('csrftoken') },
+                        credentials: 'same-origin'
+                    }).catch(function(){ /* ignore */ });
+                }
             }
         }
 
