@@ -127,10 +127,11 @@ def dashboard(request: HttpRequest):
             params=[today_date, today_date]
         ).count()
 
-        # New customers this month - use timezone-aware date
+        # New customers this month - robust range using local date
+        month_start = today_date.replace(day=1)
         new_customers_this_month = Customer.objects.filter(
-            registration_date__year=today_date.year,
-            registration_date__month=today_date.month,
+            registration_date__date__gte=month_start,
+            registration_date__date__lte=today_date,
         ).count()
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
