@@ -110,6 +110,7 @@ def to_css_class(value):
         'assigned': 'in-progress',
         'in_progress': 'in-progress',
         'inprogress': 'in-progress',
+        'overdue': 'overdue',
         'completed': 'completed',
         'cancelled': 'cancelled',
         'pending': 'pending',
@@ -118,9 +119,27 @@ def to_css_class(value):
         'high': 'high',
         'urgent': 'urgent'
     }
-    
+
     # Return mapped value if it exists, otherwise clean the string
     return status_mapping.get(value, value.replace('_', '-'))
+
+@register.filter(name='customer_status')
+def customer_status(customer):
+    """
+    Return 'new' if first-time or registered today, else 'returning'.
+    Usage: {{ customer|customer_status }}
+    """
+    try:
+        if not customer:
+            return ''
+        today = timezone.localdate()
+        # Consider new if registered today or total_visits <= 1
+        if getattr(customer, 'registration_date', None) and customer.registration_date.date() == today:
+            return 'new'
+        visits = getattr(customer, 'total_visits', 0) or 0
+        return 'new' if visits <= 1 else 'returning'
+    except Exception:
+        return ''
 
 @register.filter(name='abs')
 def absolute_value(value):
