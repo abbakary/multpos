@@ -1977,8 +1977,7 @@ def orders_list(request: HttpRequest):
 
     # Apply filters
     if status == "overdue":
-        cutoff = timezone.now() - timedelta(hours=24)
-        orders = orders.filter(status__in=["created","in_progress"], created_at__lt=cutoff)
+        orders = orders.filter(status="overdue")
     elif status != "all":
         orders = orders.filter(status=status)
     if type_filter != "all":
