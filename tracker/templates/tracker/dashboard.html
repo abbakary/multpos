@@ -418,9 +418,8 @@
       var statusCanvas = document.getElementById('orderStatusCanvas');
       if (statusCanvas) {
         var data2 = {
-          labels: ['Created','In Progress','Overdue','Completed','Cancelled'],
+          labels: ['In Progress','Overdue','Completed','Cancelled'],
           values: [
-            {{ status_counts.created|default:0 }},
             {{ status_counts.in_progress|default:0 }},
             {{ status_counts.overdue|default:0 }},
             {{ status_counts.completed|default:0 }},
