@@ -250,7 +250,7 @@
       }
 
       // Update the notification dropdown content
-      var bar = document.querySelector('.notification-dropdown .notitications-bar');
+      var bar = document.querySelector('.notification-dropdown .notitications-bar') || document.querySelector('.notification-dropdown .notifications-bar') || document.querySelector('.notification-dropdown .notifications-list');
       if(!bar) return;
       
       function fmtTime(iso){ try{ var d=new Date(iso); return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch(e){return ''} }
@@ -264,8 +264,8 @@
       function orderUrl(id){ return ("/orders/"+id+"/"); }
       
       var html = ''+
-        '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Today\'s Visitors</span><span class="badge bg-primary">'+ ((data.counts && data.counts.today_visitors)||0) +'</span></div>'+
-        '<ul class="list-unstyled mb-3">'+ (t.length > 0 ? t.map(function(x){ return '<li class="mb-1"><a class="f-light f-w-500" href="'+ custUrl(x.id) +'">'+ x.name +'</a> <span class="f-12 text-muted">'+ fmtTime(x.time) +'</span></li>'; }).join('') : '<li class="text-muted f-12">No recent visitors</li>') +'</ul>'+
+        '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Today\'s Customers</span><span class="badge bg-primary">'+ ((data.counts && data.counts.today_visitors)||0) +'</span></div>'+
+        '<ul class="list-unstyled mb-3">'+ (t.length > 0 ? t.map(function(x){ return '<li class="mb-1"><a class="f-light f-w-500" href="'+ custUrl(x.id) +'">'+ x.name +'</a> <span class="f-12 text-muted">'+ fmtTime(x.time) +'</span></li>'; }).join('') : '<li class="text-muted f-12">No customers today</li>') +'</ul>'+
         '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Low Stock</span><span class="badge bg-warning text-dark">'+ ((data.counts && data.counts.low_stock)||0) +'</span></div>'+
         '<ul class="list-unstyled mb-3">'+ (l.length > 0 ? l.map(function(x){ return '<li class="mb-1"><span class="f-light f-w-500">'+ x.name +' ('+ (x.brand||'Unbranded') +')</span> <span class="badge bg-light text-dark">'+ x.quantity +'</span></li>'; }).join('') : '<li class="text-muted f-12">No low stock items</li>') +'</ul>'+
         '<div class="mb-2 d-flex justify-content-between"><span class="f-w-600">Overdue Orders</span><span class="badge bg-danger">'+ ((data.counts && data.counts.overdue_orders)||0) +'</span></div>'+
@@ -301,9 +301,137 @@
         }
       });
   }
+  // ---- Order status auto-refresh (list and detail) ----
+  function collectOrderIdsFromPage(){
+    var ids = new Set();
+    // From order list/table links: /orders/<id>/
+    document.querySelectorAll('a[href^="/orders/"]').forEach(function(a){
+      var m = a.getAttribute('href').match(/\/orders\/(\d+)\//);
+      if (m) ids.add(m[1]);
+    });
+    // From explicit data attributes
+    document.querySelectorAll('[data-order-id]').forEach(function(el){ ids.add(String(el.getAttribute('data-order-id'))); });
+    return Array.from(ids);
+  }
+  function refreshOrderStatuses(){
+    var ids = collectOrderIdsFromPage();
+    if (!ids.length) return;
+    fetch('/api/orders/statuses/?ids='+ids.join(','))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (!data || !data.success) return;
+        var map = data.orders || {};
+        // Update any status badges/labels found next to links and in detail header
+        Object.keys(map).forEach(function(id){
+          var s = map[id];
+          // Replace any text nodes that look like status
+          document.querySelectorAll('[data-order-id="'+id+'"], a[href="/orders/'+id+'/"], tr[data-order-id="'+id+'"]').forEach(function(row){
+            // Badge inside row
+            var badge = row.querySelector('.badge-status, .status-badge, .badge');
+            if (badge) {
+              badge.textContent = s.status_display;
+              badge.className = (badge.className||'').replace(/\b(bg-soft-[^\s]+|text-[^\s]+|badge-status-[^\s]+)\b/g,'').trim();
+              var css = (s.status||'').replace('_','-');
+              // apply semantic classes
+              if (css==='in-progress') { badge.classList.add('bg-soft-warning','text-warning'); }
+              else if (css==='overdue') { badge.classList.add('bg-soft-danger','text-danger'); }
+              else if (css==='completed') { badge.classList.add('bg-soft-success','text-success'); }
+              else if (css==='cancelled') { badge.classList.add('bg-soft-secondary','text-secondary'); }
+            }
+          });
+        });
+      }).catch(function(){ /* ignore */ });
+  }
+
+  // ---- Replace 'Created' label with 'Start' in status selects ----
+  function normalizeStatusSelects(){
+    document.querySelectorAll('select option[value="created"]').forEach(function(opt){ opt.textContent = 'Start'; });
+  }
+
+  // ---- Order detail completion: auto-submit on file upload, hide password ----
+  function enhanceOrderCompletionForm(){
+    var form = document.querySelector('form[action*="/complete/"]');
+    if (!form) return;
+    var pwd = form.querySelector('input[type="password"]');
+    if (pwd) { pwd.closest('.form-group') ? pwd.closest('.form-group').style.display='none' : (pwd.style.display='none'); }
+    function trySubmit(){
+      var sig = form.querySelector('input[type="file"][name="signature_file"]');
+      var att = form.querySelector('input[type="file"][name="completion_attachment"]');
+      if ((sig && sig.files && sig.files.length) || (att && att.files && att.files.length)) {
+        form.requestSubmit ? form.requestSubmit() : form.submit();
+      }
+    }
+    form.querySelectorAll('input[type="file"]').forEach(function(inp){ inp.addEventListener('change', trySubmit); });
+  }
+
+  // ---- Registration form: reorganize Step for sales/service and fix inquiry ----
+  function reorganizeSalesServiceForm(){
+    var intent = document.querySelector('input[name="intent"]:checked') || document.getElementById('registrationIntent');
+    var val = intent ? (intent.value || intent.textContent || '').toLowerCase() : '';
+    var container = document.getElementById('form-container') || document;
+    if (!container) return;
+    var isSales = val==='sales' || val==='purchase' || val==='sale';
+    var isService = val==='service';
+    var isInquiry = val==='consultation' || val==='inquiry' || val==='inquiries';
+
+    // Hide service/sales fields on inquiry
+    var svcSalesFields = ['id_item_name','id_brand','id_quantity','id_tire_type','id_condition','id_description'];
+    var inquiryFields = ['id_inquiry_type','id_questions','id_contact_preference','id_follow_up_date'];
+
+    if (isInquiry) {
+      svcSalesFields.forEach(function(id){ var el = container.querySelector('#'+id); if (el) { var g = el.closest('.mb-3, .form-group, .col'); if (g) g.style.display='none'; }});
+      inquiryFields.forEach(function(id){ var el = container.querySelector('#'+id); if (el) { var g = el.closest('.mb-3, .form-group, .col'); if (g) g.style.display=''; }});
+      return;
+    }
+
+    if (!(isSales || isService)) return;
+
+    // Ensure order: Select Item, Item name+brand (auto), Quantity, Tire type, Condition, Description, then Add-ons
+    var orderIds = ['id_item_name','id_brand','id_quantity','id_tire_type','id_condition','id_description'];
+    var form = container.querySelector('form') || container;
+    var anchor = container.querySelector('#step-3, #items-section, form .row, form .card-body') || form;
+    if (!anchor) return;
+
+    // Create a wrapper for organized layout
+    var wrapper = document.createElement('div');
+    wrapper.id = 'organized-sales-service';
+    wrapper.className = 'row g-3';
+
+    orderIds.forEach(function(id){
+      var el = container.querySelector('#'+id);
+      if (el){ var group = el.closest('.mb-3, .form-group, .col') || el; wrapper.appendChild(group); group.style.display=''; }
+    });
+
+    // Add-ons section
+    var addons = container.querySelector('#tire-addons, .tire-addons');
+    if (!addons){
+      addons = document.createElement('div');
+      addons.className='col-12';
+      addons.innerHTML = '<div class="card"><div class="card-header"><h6>Tire Service Add-ons</h6></div><div class="card-body d-flex flex-wrap gap-3">\
+        <label class="form-check-label"><input type="checkbox" class="form-check-input" name="addons_install"/> Install Tires</label>\
+        <label class="form-check-label"><input type="checkbox" class="form-check-input" name="addons_balance"/> Wheel Balancing</label>\
+        <label class="form-check-label"><input type="checkbox" class="form-check-input" name="addons_align"/> Wheel Alignment</label>\
+        <label class="form-check-label"><input type="checkbox" class="form-check-input" name="addons_dispose"/> Old Tire Disposal</label>\
+      </div></div>';
+    }
+    wrapper.appendChild(addons);
+
+    // Insert wrapper at top of anchor
+    if (!document.getElementById('organized-sales-service')) {
+      anchor.prepend(wrapper);
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     loadNotifications();
     setInterval(loadNotifications, 60000);
+    normalizeStatusSelects();
+    enhanceOrderCompletionForm();
+    reorganizeSalesServiceForm();
+    refreshOrderStatuses();
+    setInterval(refreshOrderStatuses, 60000);
+    // Re-run when user changes intent
+    document.addEventListener('change', function(e){ if(e.target && (e.target.name==='intent' || e.target.id==='registrationIntent')) reorganizeSalesServiceForm(); });
   });
 
   // Global header search (customers)

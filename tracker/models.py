@@ -111,6 +111,7 @@ class Order(models.Model):
     STATUS_CHOICES = [
         ("created", "Start"),
         ("in_progress", "In Progress"),
+        ("overdue", "Overdue"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]

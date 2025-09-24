@@ -30,6 +30,19 @@ from datetime import datetime, timedelta
 from django.contrib.auth.views import LogoutView
 from django.views.generic import View
 
+
+def _mark_overdue_orders(hours=24):
+    try:
+        now = timezone.now()
+        # Auto progress: created -> in_progress after 10 minutes
+        created_cutoff = now - timedelta(minutes=10)
+        Order.objects.filter(status="created", created_at__lte=created_cutoff).update(status="in_progress", started_at=now)
+        # Persist overdue: any non-final older than cutoff
+        cutoff = now - timedelta(hours=hours)
+        Order.objects.filter(status__in=["created","in_progress"], created_at__lt=cutoff).update(status="overdue")
+    except Exception:
+        pass
+
 class CustomLoginView(LoginView):
     template_name = "registration/login.html"
 
@@ -74,7 +87,49 @@ class CustomLogoutView(LogoutView):
 
 
 @login_required
+def api_order_status(request: HttpRequest, pk: int):
+    _mark_overdue_orders(hours=24)
+    try:
+        o = Order.objects.get(pk=pk)
+        data = {
+            'success': True,
+            'id': o.id,
+            'status': o.status,
+            'status_display': o.get_status_display(),
+            'created_at': o.created_at,
+            'started_at': o.started_at,
+            'completed_at': o.completed_at,
+            'cancelled_at': o.cancelled_at,
+        }
+        return JsonResponse(data)
+    except Order.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Not found'}, status=404)
+
+@login_required
+def api_orders_statuses(request: HttpRequest):
+    _mark_overdue_orders(hours=24)
+    ids_param = request.GET.get('ids') or ''
+    try:
+        ids = [int(x) for x in ids_param.replace(',', ' ').split() if x.isdigit()]
+    except Exception:
+        ids = []
+    qs = Order.objects.filter(id__in=ids)
+    out = {}
+    for o in qs:
+        out[str(o.id)] = {
+            'status': o.status,
+            'status_display': o.get_status_display(),
+            'created_at': o.created_at,
+            'started_at': o.started_at,
+            'completed_at': o.completed_at,
+            'cancelled_at': o.cancelled_at,
+        }
+    return JsonResponse({'success': True, 'orders': out})
+
+@login_required
 def dashboard(request: HttpRequest):
+    # Normalize statuses before computing metrics
+    _mark_overdue_orders(hours=24)
     # Always calculate fresh metrics for accurate data
     today = timezone.localdate()
     
@@ -93,8 +148,15 @@ def dashboard(request: HttpRequest):
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
         priority_counts = {x["priority"]: x["c"] for x in priority_counts_qs}
 
+        # Count persisted overdue
+        try:
+            overdue_count = Order.objects.filter(status="overdue").count()
+            status_counts["overdue"] = overdue_count
+        except Exception:
+            status_counts.setdefault("overdue", 0)
+
         # Ensure all possible status values exist in status_counts (even if zero)
-        all_statuses = ["created", "in_progress", "completed", "cancelled"]
+        all_statuses = ["created", "in_progress", "overdue", "completed", "cancelled"]
         for status in all_statuses:
             if status not in status_counts:
                 status_counts[status] = 0
@@ -119,10 +181,11 @@ def dashboard(request: HttpRequest):
             params=[today_date, today_date]
         ).count()
 
-        # New customers this month - use timezone-aware date
+        # New customers this month - robust range using local date
+        month_start = today_date.replace(day=1)
         new_customers_this_month = Customer.objects.filter(
-            registration_date__year=today_date.year,
-            registration_date__month=today_date.month,
+            registration_date__date__gte=month_start,
+            registration_date__date__lte=today_date,
         ).count()
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
@@ -201,7 +264,7 @@ def dashboard(request: HttpRequest):
         # cache.set(cache_key, metrics, 60)
 
     # Always fresh data for fast-updating sections
-    recent_orders = (
+    recent_orders = list(
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
     # Fix completed today calculation - check all completed orders for today
@@ -1937,7 +2000,10 @@ def customer_groups_data(request: HttpRequest):
 @login_required
 def orders_list(request: HttpRequest):
     from django.db.models import Q, Sum
-    
+
+    # Persist overdue statuses before listing
+    _mark_overdue_orders(hours=24)
+
     # Get timezone from cookie or use default
     tzname = request.COOKIES.get('django_timezone')
     
@@ -1950,7 +2016,9 @@ def orders_list(request: HttpRequest):
     orders = Order.objects.select_related("customer", "vehicle").order_by("-created_at")
 
     # Apply filters
-    if status != "all":
+    if status == "overdue":
+        orders = orders.filter(status="overdue")
+    elif status != "all":
         orders = orders.filter(status=status)
     if type_filter != "all":
         orders = orders.filter(type=type_filter)
@@ -1977,7 +2045,7 @@ def orders_list(request: HttpRequest):
     # Get counts for stats
     total_orders = Order.objects.count()
     pending_orders = Order.objects.filter(status="created").count()
-    active_orders = Order.objects.filter(status__in=["created", "in_progress"]).count()
+    active_orders = Order.objects.filter(status__in=["created", "in_progress", "overdue"]).count()
     completed_today = Order.objects.filter(status="completed", completed_at__date=timezone.localdate()).count()
     urgent_orders = Order.objects.filter(priority="urgent").count()
     revenue_today = 0
@@ -2258,11 +2326,7 @@ def complete_order(request: HttpRequest, pk: int):
     if request.method != 'POST':
         return redirect('tracker:order_detail', pk=o.id)
 
-    password = request.POST.get('password', '')
-    if not password or not request.user.check_password(password):
-        messages.error(request, 'Password confirmation failed. Please enter your account password to sign.')
-        return redirect('tracker:order_detail', pk=o.id)
-
+    # No password confirmation required; require a signature image or completion file
     sig = request.FILES.get('signature_file')
     att = request.FILES.get('completion_attachment')
     if not sig and not att:
@@ -3031,6 +3095,9 @@ def api_notifications_summary(request: HttpRequest):
     stock_threshold = int(request.GET.get('stock_threshold', 5) or 5)
     overdue_hours = int(request.GET.get('overdue_hours', 24) or 24)
 
+    # Normalize statuses once per request
+    _mark_overdue_orders(hours=overdue_hours)
+
     # Use timezone-aware date for consistency
     today_date = timezone.localdate()
     now = timezone.now()
@@ -3061,9 +3128,13 @@ def api_notifications_summary(request: HttpRequest):
         'quantity': i.quantity
     } for i in low_qs[:8]]
 
-    # Overdue orders (not completed, older than cutoff)
-    overdue_qs = Order.objects.filter(status__in=['created','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
+    # Overdue orders (persisted or derived for safety)
+    overdue_qs = Order.objects.filter(status='overdue').select_related('customer').order_by('created_at')
     overdue_count = overdue_qs.count()
+    if overdue_count == 0:
+        # Fallback derivation in case normalization skipped
+        overdue_qs = Order.objects.filter(status__in=['created','in_progress'], created_at__lt=cutoff).select_related('customer').order_by('created_at')
+        overdue_count = overdue_qs.count()
     def age_minutes(dt):
         return int((now - dt).total_seconds() // 60) if dt else None
     overdue = [{
