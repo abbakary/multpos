@@ -114,7 +114,8 @@
                     <h5>Service Distribution</h5>
                 </div>
                 <div class="card-body">
-                    <div id="serviceDistributionChart"><canvas class="chart-canvas" id="serviceDistributionCanvas" width="400" height="240" aria-label="Service Distribution" role="img"></canvas></div>
+                   
+                    
                     <div class="text-center mt-3">
                         <a href="{% url 'tracker:analytics_service' %}" class="btn btn-sm btn-outline-primary">View Details</a>
                     </div>
@@ -129,54 +130,38 @@
                     <h5>Order Status</h5>
                 </div>
                 <div class="card-body">
-                    <div id="orderStatusChart"><canvas class="chart-canvas" id="orderStatusCanvas" width="400" height="240" aria-label="Order Status" role="img"></canvas></div>
-                    <div class="mt-3">
-                        <div class="progress-container">
-                            <div class="progress-label">
-                                <span>Completed</span>
-                                <span>{{ status_counts.completed|default:0 }} ({{ status_percentages.completed_percent|floatformat:0 }}%)</span>
+                    <div class="chart-container" style="position: relative; height: 300px;">
+                        <canvas id="orderStatusChart" width="400" height="300"></canvas>
+                    </div>
+                    <div class="status-legend mt-3">
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #28a745;"></div>
+                                    <small>Completed</small>
+                                    <div class="fw-bold">{{ status_counts.completed|default:0 }}</div>
+                                </div>
                             </div>
-                            <div class="progress dashboard-progress">
-                                <div class="progress-bar completed" role="progressbar" 
-                                     data-width="{{ status_percentages.completed_percent|floatformat:0 }}" 
-                                     aria-valuenow="{{ status_counts.completed|default:0 }}" 
-                                     aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
+                            <div class="col-3">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #007bff;"></div>
+                                    <small>In Progress</small>
+                                    <div class="fw-bold">{{ status_counts.in_progress|default:0 }}</div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="progress-container">
-                            <div class="progress-label">
-                                <span>In Progress</span>
-                                <span>{{ status_counts.in_progress|default:0 }} ({{ status_percentages.in_progress_percent|floatformat:0 }}%)</span>
+                            <div class="col-3">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #dc3545;"></div>
+                                    <small>Overdue</small>
+                                    <div class="fw-bold">{{ status_counts.overdue|default:0 }}</div>
+                                </div>
                             </div>
-                            <div class="progress dashboard-progress">
-                                <div class="progress-bar in-progress" role="progressbar" 
-                                     data-width="{{ status_percentages.in_progress_percent|floatformat:0 }}" 
-                                     aria-valuenow="{{ status_counts.in_progress|default:0 }}" 
-                                     aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
-                            </div>
-                        </div>
-                        <div class="progress-container">
-                            <div class="progress-label">
-                                <span>Overdue</span>
-                                <span>{{ status_counts.overdue|default:0 }} ({{ status_percentages.overdue_percent|floatformat:0 }}%)</span>
-                            </div>
-                            <div class="progress dashboard-progress">
-                                <div class="progress-bar overdue" role="progressbar"
-                                     data-width="{{ status_percentages.overdue_percent|floatformat:0 }}"
-                                     aria-valuenow="{{ status_counts.overdue|default:0 }}"
-                                     aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
-                            </div>
-                        </div>
-                        <div class="progress-container">
-                            <div class="progress-label">
-                                <span>Cancelled</span>
-                                <span>{{ status_counts.cancelled|default:0 }} ({{ status_percentages.cancelled_percent|floatformat:0 }}%)</span>
-                            </div>
-                            <div class="progress dashboard-progress">
-                                <div class="progress-bar cancelled" role="progressbar"
-                                     data-width="{{ status_percentages.cancelled_percent|floatformat:0 }}"
-                                     aria-valuenow="{{ status_counts.cancelled|default:0 }}"
-                                     aria-valuemin="0" aria-valuemax="{{ total_orders }}"></div>
+                            <div class="col-3">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #6c757d;"></div>
+                                    <small>Cancelled</small>
+                                    <div class="fw-bold">{{ status_counts.cancelled|default:0 }}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -362,6 +347,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/dashboard_charts.js' %}"></script>
 <script>
 (function(){
   function drawPie(canvas, data, colors) {

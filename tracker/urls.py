@@ -4,6 +4,7 @@ from django.views.generic import RedirectView
 from django.contrib.auth.views import LogoutView
 from . import views
 from .views import CustomLoginView, CustomLogoutView
+from .views_api_fix import api_customer_groups_data_fixed
 
 app_name = "tracker"
 
@@ -28,6 +29,7 @@ urlpatterns = [
     path("customer-groups/", views.customer_groups_advanced, name="customer_groups"),
     path("customer-groups/advanced/", views.customer_groups_advanced, name="customer_groups_advanced"),
     path("api/customer-groups-data/", views.api_customer_groups_data, name="api_customer_groups_data"),
+    path("api/customer-groups-data-fixed/", api_customer_groups_data_fixed, name="api_customer_groups_data_fixed"),
     path("customer-groups/export/", views.customer_groups_export, name="customer_groups_export"),
     path("api/customer-groups/data/", views.customer_groups_data, name="customer_groups_data"),
 
@@ -68,6 +70,9 @@ urlpatterns = [
     path("inventory/<int:pk>/delete/", views.inventory_delete, name="inventory_delete"),
     path("inventory/stock-management/", views.inventory_stock_management, name="inventory_stock_management"),
     path("inventory/low-stock/", views.inventory_low_stock, name="inventory_low_stock"),
+    
+    # Brand management
+    path("brands/", views.brand_list, name="brand_list"),
 
 
     # Admin-only Organization Management
@@ -102,6 +107,7 @@ urlpatterns = [
     path("api/inventory/stock/", views.api_inventory_stock, name="api_inventory_stock"),
     path("api/inventory/create-item/", views.api_create_item_with_brand, name="api_create_item_with_brand"),
     path("api/brands/create/", views.create_brand, name="api_create_brand"),
+    path("api/brands/<int:pk>/update/", views.update_brand, name="api_update_brand"),
     path("api/customers/<int:customer_id>/vehicles/", views.api_customer_vehicles, name="api_customer_vehicles"),
     # Notifications summary (canonical)
     path("api/notifications/summary/", views.api_notifications_summary, name="api_notifications_summary"),

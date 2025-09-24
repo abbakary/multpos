@@ -52,18 +52,21 @@ class CustomerBasicForm(forms.Form):
         max_length=20,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': '+XXX XXX XXX XXX or 0XXXXXXXXX',
-            'required': True
+            'placeholder': '+255 XXX XXX XXX or 0X XXX XXX XXX',
+            'required': True,
+            'pattern': '^(\+255\s?\d{3}\s?\d{3}\s?\d{3}|0[67]\s?\d{3}\s?\d{3}\s?\d{3})$',
+            'title': 'Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX',
+            'maxlength': '16'
         })
     )
 
     def clean_phone(self):
         value = (self.cleaned_data.get('phone') or '').strip()
-        intl = re.compile(r'^\+\d{3}(?:\s?\d{3}){3}$')
-        # Allow local numbers starting with 0 and 9 to 13 digits total
-        local = re.compile(r'^0\d{8,12}$')
+        # Tanzania format: +255 XXX XXX XXX or 0X XXX XXX XXX
+        intl = re.compile(r'^\+255\s?\d{3}\s?\d{3}\s?\d{3}$')
+        local = re.compile(r'^0[67]\s?\d{3}\s?\d{3}\s?\d{3}$')
         if not (intl.match(value) or local.match(value)):
-            raise forms.ValidationError('Enter a valid phone number: +XXX XXX XXX XXX or 0XXXXXXXX… (9–13 digits).')
+            raise forms.ValidationError('Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX')
         return value
 
     email = forms.EmailField(
@@ -104,19 +107,43 @@ class CustomerStep1Form(forms.Form):
         max_length=25,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': '+255 XXX XXX XXX or 06XXXXXXXX',
-            'required': True
+            'placeholder': '+255 XXX XXX XXX or 0X XXX XXX XXX',
+            'required': True,
+            'pattern': '^(\+255\s?\d{3}\s?\d{3}\s?\d{3}|0[67]\s?\d{3}\s?\d{3}\s?\d{3})$',
+            'title': 'Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX',
+            'maxlength': '16'
+        })
+    )
+    whatsapp = forms.CharField(
+        required=False,
+        max_length=25,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '+255 XXX XXX XXX (if different from phone)',
+            'pattern': '^(\+255\s?\d{3}\s?\d{3}\s?\d{3}|0[67]\s?\d{3}\s?\d{3}\s?\d{3})$',
+            'title': 'Enter a valid Tanzania WhatsApp number: +255 XXX XXX XXX or 0X XXX XXX XXX',
+            'maxlength': '16'
         })
     )
 
     def clean_phone(self):
         value = (self.cleaned_data.get('phone') or '').strip()
-        intl = re.compile(r'^\+\d{3}(?:\s?\d{3}){3}$')
-        # Allow local numbers starting with 0 and 9 to 13 digits total
-        local = re.compile(r'^0\d{8,12}$')
+        # Tanzania format: +255 XXX XXX XXX or 0X XXX XXX XXX
+        intl = re.compile(r'^\+255\s?\d{3}\s?\d{3}\s?\d{3}$')
+        local = re.compile(r'^0[67]\s?\d{3}\s?\d{3}\s?\d{3}$')
         if not (intl.match(value) or local.match(value)):
-            raise forms.ValidationError('Enter a valid phone number: +255 XXX XXX XXX or 0XXXXXXXX… (9–13 digits).')
+            raise forms.ValidationError('Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX')
         return value
+    
+    def clean_whatsapp(self):
+        value = (self.cleaned_data.get('whatsapp') or '').strip()
+        if value:
+            # Tanzania format: +255 XXX XXX XXX or 0X XXX XXX XXX
+            intl = re.compile(r'^\+255\s?\d{3}\s?\d{3}\s?\d{3}$')
+            local = re.compile(r'^0[67]\s?\d{3}\s?\d{3}\s?\d{3}$')
+            if not (intl.match(value) or local.match(value)):
+                raise forms.ValidationError('Enter a valid Tanzania WhatsApp number: +255 XXX XXX XXX or 0X XXX XXX XXX')
+        return value or None
 
     email = forms.EmailField(
         required=False,
@@ -259,11 +286,24 @@ class CustomerEditForm(forms.ModelForm):
     """Form for editing existing customers"""
     class Meta:
         model = Customer
-        fields = ['full_name', 'phone', 'email', 'address', 'notes', 
+        fields = ['full_name', 'phone', 'whatsapp', 'email', 'address', 'notes', 
                  'customer_type', 'organization_name', 'tax_number', 'personal_subtype']
         widgets = {
             'full_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+XXX XXX XXX XXX or 0XXXXXXXXX'}),
+            'phone': forms.TextInput(attrs={
+                'class': 'form-control', 
+                'placeholder': '+255 XXX XXX XXX or 0X XXX XXX XXX',
+                'pattern': '^(\+255\s?\d{3}\s?\d{3}\s?\d{3}|0[67]\s?\d{3}\s?\d{3}\s?\d{3})$',
+                'title': 'Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX',
+                'maxlength': '16'
+            }),
+            'whatsapp': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '+255 XXX XXX XXX (if different from phone)',
+                'pattern': '^(\+255\s?\d{3}\s?\d{3}\s?\d{3}|0[67]\s?\d{3}\s?\d{3}\s?\d{3})$',
+                'title': 'Enter a valid Tanzania WhatsApp number: +255 XXX XXX XXX or 0X XXX XXX XXX',
+                'maxlength': '16'
+            }),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
@@ -288,12 +328,22 @@ class CustomerEditForm(forms.ModelForm):
     
     def clean_phone(self):
         value = (self.cleaned_data.get('phone') or '').strip()
-        intl = re.compile(r'^\+\d{3}(?:\s?\d{3}){3}$')
-        # Allow local numbers starting with 0 and 9 to 13 digits total
-        local = re.compile(r'^0\d{8,12}$')
+        # Tanzania format: +255 XXX XXX XXX or 0X XXX XXX XXX
+        intl = re.compile(r'^\+255\s?\d{3}\s?\d{3}\s?\d{3}$')
+        local = re.compile(r'^0[67]\s?\d{3}\s?\d{3}\s?\d{3}$')
         if not (intl.match(value) or local.match(value)):
-            raise forms.ValidationError('Enter a valid phone number: +255 XXX XXX XXX or 0XXXXXXXX… (9–13 digits).')
+            raise forms.ValidationError('Enter a valid Tanzania phone number: +255 XXX XXX XXX or 0X XXX XXX XXX')
         return value
+    
+    def clean_whatsapp(self):
+        value = (self.cleaned_data.get('whatsapp') or '').strip()
+        if value:
+            # Tanzania format: +255 XXX XXX XXX or 0X XXX XXX XXX
+            intl = re.compile(r'^\+255\s?\d{3}\s?\d{3}\s?\d{3}$')
+            local = re.compile(r'^0[67]\s?\d{3}\s?\d{3}\s?\d{3}$')
+            if not (intl.match(value) or local.match(value)):
+                raise forms.ValidationError('Enter a valid Tanzania WhatsApp number: +255 XXX XXX XXX or 0X XXX XXX XXX')
+        return value or None
     
     def clean(self):
         cleaned = super().clean()
@@ -475,12 +525,13 @@ class OrderForm(forms.ModelForm):
             item_brand_map = {}
             
             for item in items:
-                if item.name and item.brand:
-                    label = f"{item.brand.name} - {item.name}"
+                if item.name:
+                    brand_name = item.brand.name if item.brand else 'Unbranded'
+                    label = f"{brand_name} - {item.name}"
                     item_choices.append((item.id, label))
                     item_brand_map[str(item.id)] = {
                         'name': item.name,
-                        'brand': item.brand.name,
+                        'brand': brand_name,
                         'quantity': item.quantity
                     }
             
@@ -548,9 +599,17 @@ class OrderForm(forms.ModelForm):
                 try:
                     item = InventoryItem.objects.select_related('brand').get(id=item_id)
                     cleaned["item_name"] = item.name
-                    cleaned["brand"] = item.brand.name if item.brand else ""
+                    cleaned["brand"] = item.brand.name if item.brand else "Unbranded"
                 except InventoryItem.DoesNotExist:
                     self.add_error("item_name", "Selected item not found")
+                except Exception as e:
+                    # Handle case where item exists but brand is missing
+                    try:
+                        item = InventoryItem.objects.get(id=item_id)
+                        cleaned["item_name"] = item.name
+                        cleaned["brand"] = "Unbranded"
+                    except InventoryItem.DoesNotExist:
+                        self.add_error("item_name", "Selected item not found")
             
             q = cleaned.get("quantity")
             if not q or q < 1:
@@ -680,23 +739,21 @@ class InventoryItemForm(forms.ModelForm):
         from .models import Brand
         self.fields['brand'] = BrandChoiceField(
             queryset=Brand.objects.filter(is_active=True).order_by('name'),
-            empty_label="Select a brand or add new",
+            empty_label="Select a brand (optional)",
             widget=forms.Select(attrs={
                 'class': 'form-select',
                 'data-control': 'select2',
-                'data-placeholder': 'Select a brand or add new',
+                'data-placeholder': 'Select a brand (optional)',
                 'data-allow-clear': 'true',
                 'data-tags': 'true',
                 'data-token-separators': '[\",\"]',
                 'data-create-option': 'true',
-                'data-ajax--url': '/inventory/api/brands/create/'
+                'data-ajax--url': '/api/brands/create/'
             }),
-            required=True
+            required=False
         )
         
-        # Add help text
-        self.fields['brand'].help_text = 'Select an existing brand or <a href="#" data-bs-toggle="modal" data-bs-target="#addBrandModal">add a new one</a>'
-        self.fields['brand'].help_text_format = 'html'
+
         
         # Set default values for new items
         if not self.instance.pk:

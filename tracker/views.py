@@ -181,11 +181,10 @@ def dashboard(request: HttpRequest):
             params=[today_date, today_date]
         ).count()
 
-        # New customers this month - robust range using local date
-        month_start = today_date.replace(day=1)
+        # New customers this month - MySQL compatible
+        from .utils.mysql_compat import month_start_filter
         new_customers_this_month = Customer.objects.filter(
-            registration_date__date__gte=month_start,
-            registration_date__date__lte=today_date,
+            month_start_filter('registration_date')
         ).count()
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
@@ -267,18 +266,19 @@ def dashboard(request: HttpRequest):
     recent_orders = list(
         Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
-    # Fix completed today calculation - check all completed orders for today
+    # Fix completed today calculation - MySQL compatible
     from datetime import date
-    today = date.today()
+    from .utils.mysql_compat import today_filter, get_date_range
     
-    # Count completed orders by completed_at date (if set) or created_at date
+    today = timezone.now().date()
+    today_start, today_end = get_date_range(today)
+    
+    # Count completed orders by completed_at date (if set) or created_at date - MySQL compatible
     completed_today = Order.objects.filter(
         status="completed"
-    ).extra(
-        where=[
-            "(completed_at IS NOT NULL AND DATE(completed_at) = %s) OR (completed_at IS NULL AND DATE(created_at) = %s)"
-        ],
-        params=[today, today]
+    ).filter(
+        Q(completed_at__gte=today_start, completed_at__lte=today_end) |
+        Q(completed_at__isnull=True, created_at__gte=today_start, created_at__lte=today_end)
     ).count()
 
     # Use completed_today from metrics if available, otherwise calculate fresh
@@ -845,6 +845,7 @@ def customer_register(request: HttpRequest):
                     c = Customer.objects.create(
                         full_name=full_name,
                         phone=phone,
+                        whatsapp=data.get("whatsapp"),
                         email=data.get("email"),
                         address=data.get("address"),
                         notes=data.get("notes"),
@@ -1035,6 +1036,7 @@ def customer_register(request: HttpRequest):
                 c = Customer.objects.create(
                     full_name=full_name,
                     phone=phone,
+                    whatsapp=data.get("whatsapp"),
                     email=data.get("email"),
                     address=data.get("address"),
                     notes=data.get("notes") or data.get("additional_notes"),
@@ -3165,11 +3167,8 @@ def api_notifications_summary(request: HttpRequest):
 is_manager = user_passes_test(lambda u: u.is_authenticated and (u.is_superuser or u.groups.filter(name='manager').exists()))
 
 @login_required
-@is_manager
 @csrf_exempt
 @require_http_methods(["POST"])
-@login_required
-@is_manager
 def create_brand(request):
     """API endpoint to create a new brand via AJAX"""
     from django.http import JsonResponse
@@ -3182,17 +3181,26 @@ def create_brand(request):
             return JsonResponse({'success': False, 'error': 'Brand name is required'}, status=400)
             
         # Check if brand already exists (case-insensitive)
-        if Brand.objects.filter(name__iexact=name).exists():
+        existing_brand = Brand.objects.filter(name__iexact=name).first()
+        if existing_brand:
+            # Return the existing brand instead of error
             return JsonResponse({
-                'success': False, 
-                'error': f'A brand with the name "{name}" already exists.'
-            }, status=400)
+                'success': True,
+                'brand': {
+                    'id': existing_brand.id,
+                    'name': existing_brand.name,
+                    'description': existing_brand.description or '',
+                    'website': existing_brand.website or ''
+                },
+                'message': 'Brand already exists'
+            })
             
         # Create the brand
         brand = Brand.objects.create(
             name=name,
             description=data.get('description', '').strip(),
-            website=data.get('website', '').strip()
+            website=data.get('website', '').strip(),
+            is_active=True
         )
         
         return JsonResponse({
@@ -3202,7 +3210,55 @@ def create_brand(request):
                 'name': brand.name,
                 'description': brand.description or '',
                 'website': brand.website or ''
-            }
+            },
+            'message': 'Brand created successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def update_brand(request, pk):
+    """API endpoint to update a brand via AJAX"""
+    from django.http import JsonResponse
+    
+    try:
+        brand = get_object_or_404(Brand, pk=pk)
+        data = json.loads(request.body)
+        
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Brand name is required'}, status=400)
+            
+        # Check if another brand with this name exists (case-insensitive)
+        existing_brand = Brand.objects.filter(name__iexact=name).exclude(pk=pk).first()
+        if existing_brand:
+            return JsonResponse({
+                'success': False, 
+                'error': f'A brand with the name "{name}" already exists.'
+            }, status=400)
+            
+        # Update the brand
+        brand.name = name
+        brand.description = data.get('description', '').strip()
+        brand.website = data.get('website', '').strip()
+        brand.is_active = data.get('is_active', True)
+        brand.save()
+        
+        return JsonResponse({
+            'success': True,
+            'brand': {
+                'id': brand.id,
+                'name': brand.name,
+                'description': brand.description or '',
+                'website': brand.website or '',
+                'is_active': brand.is_active
+            },
+            'message': 'Brand updated successfully'
         })
         
     except json.JSONDecodeError:
@@ -3327,6 +3383,13 @@ def inventory_stock_management(request: HttpRequest):
         'summary': summary,
     })
 
+
+@login_required
+@is_manager
+def brand_list(request: HttpRequest):
+    """List all brands with management options"""
+    brands = Brand.objects.all().order_by('name')
+    return render(request, 'tracker/brand_list.html', {'brands': brands})
 
 @login_required
 @is_manager
@@ -4415,12 +4478,13 @@ def analytics_customer(request: HttpRequest):
         except Exception:
             pass
 
-    # KPIs
+    # KPIs with enhanced contact information analysis
     totals = {
         "new_customers": qs.count(),
         "total_customers": Customer.objects.count(),
         "with_email": qs.exclude(email__isnull=True).exclude(email="").count(),
         "with_phone": qs.exclude(phone__isnull=True).exclude(phone="").count(),
+        "with_whatsapp": qs.filter(Q(whatsapp__isnull=False) & ~Q(whatsapp="")).count(),
     }
 
     # Trend of new customers
@@ -4462,6 +4526,22 @@ def analytics_customer(request: HttpRequest):
 
     # By type distribution
     type_counts = {row["customer_type"]: row["c"] for row in qs.values("customer_type").annotate(c=Count("id"))}
+    
+    # Contact method analysis
+    contact_analysis = {
+        'email_only': qs.filter(email__isnull=False, phone__isnull=True).count(),
+        'phone_only': qs.filter(phone__isnull=False, email__isnull=True).count(), 
+        'both_contacts': qs.filter(email__isnull=False, phone__isnull=False).count(),
+        'no_contacts': qs.filter(email__isnull=True, phone__isnull=True).count()
+    }
+    
+    # Registration source analysis
+    registration_analysis = {
+        'with_orders': qs.filter(orders__isnull=False).distinct().count(),
+        'standalone': qs.filter(orders__isnull=True).count(),
+        'with_vehicles': qs.filter(vehicles__isnull=False).distinct().count(),
+        'complete_profile': qs.exclude(Q(email__isnull=True) | Q(phone__isnull=True) | Q(address__isnull=True)).count()
+    }
 
     # Top customers by visits and spend (overall, not only period-limited)
     from django.db.models import Max
@@ -4487,6 +4567,24 @@ def analytics_customer(request: HttpRequest):
                 type_counts.get("personal", 0),
             ],
         },
+        "contact_methods": {
+            "labels": ["Email Only", "Phone Only", "Both", "No Contact"],
+            "values": [
+                contact_analysis['email_only'],
+                contact_analysis['phone_only'],
+                contact_analysis['both_contacts'],
+                contact_analysis['no_contacts']
+            ]
+        },
+        "registration_source": {
+            "labels": ["With Orders", "Standalone", "With Vehicles", "Complete Profile"],
+            "values": [
+                registration_analysis['with_orders'],
+                registration_analysis['standalone'],
+                registration_analysis['with_vehicles'],
+                registration_analysis['complete_profile']
+            ]
+        }
     }
 
     return render(
@@ -4500,6 +4598,8 @@ def analytics_customer(request: HttpRequest):
             "charts_json": json.dumps(charts),
             "totals": totals,
             "top_customers": top_customers,
+            "contact_analysis": contact_analysis,
+            "registration_analysis": registration_analysis,
             "today": timezone.localdate(),
         }
     )

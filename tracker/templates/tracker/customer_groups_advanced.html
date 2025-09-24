@@ -43,11 +43,11 @@
 <div class="container-fluid">
   <div class="page-title">
     <div class="row">
-      <div class="col-6"><h4>Customer Groups - Advanced</h4></div>
+      <div class="col-6"><h4>Customer Types - Advanced</h4></div>
       <div class="col-6">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="{% url 'tracker:dashboard' %}">Home</a></li>
-          <li class="breadcrumb-item active">Customer Groups</li>
+          <li class="breadcrumb-item active">Customer Types</li>
         </ol>
       </div>
     </div>
@@ -57,22 +57,48 @@
 <div class="container-fluid">
   <!-- Controls -->
   <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-3">
       <label class="form-label">Time Period</label>
       <select id="periodSelect" class="form-select">
-        <option value="1month">Last Month</option>
+        <option value="1month">Last 30 Days</option>
         <option value="3months">Last 3 Months</option>
         <option value="6months" selected>Last 6 Months</option>
         <option value="1year">Last Year</option>
       </select>
     </div>
-    <div class="col-md-6 d-flex align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">Activity Filter</label>
+      <select id="activitySelect" class="form-select">
+        <option value="all" selected>All Customers</option>
+        <option value="active">Active (with orders)</option>
+        <option value="inactive">Inactive (no orders)</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Order Type</label>
+      <select id="orderTypeSelect" class="form-select">
+        <option value="all" selected>All Order Types</option>
+        <option value="service">Service Only</option>
+        <option value="sales">Sales Only</option>
+        <option value="consultation">Consultation Only</option>
+      </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
       <button id="refreshBtn" class="btn btn-primary me-2">
         <i class="fa fa-refresh"></i> Refresh
       </button>
       <button id="exportBtn" class="btn btn-outline-secondary">
         <i class="fa fa-download"></i> Export
       </button>
+    </div>
+  </div>
+  
+  <!-- Filter Summary -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="alert alert-info">
+        <strong>Current Filter:</strong> <span id="filterSummary">Last 6 Months - All Customers - All Order Types</span>
+      </div>
     </div>
   </div>
 
@@ -130,7 +156,7 @@
     <div class="spinner-border text-primary" role="status">
       <span class="visually-hidden">Loading...</span>
     </div>
-    <p class="mt-2">Loading customer groups...</p>
+    <p class="mt-2">Loading customer types...</p>
   </div>
 </div>
 {% endblock %}
@@ -141,6 +167,8 @@ class CustomerGroupsManager {
   constructor() {
     this.currentGroup = 'all';
     this.currentPeriod = '6months';
+    this.currentActivity = 'all';
+    this.currentOrderType = 'all';
     this.init();
   }
 
@@ -152,6 +180,19 @@ class CustomerGroupsManager {
   bindEvents() {
     document.getElementById('periodSelect').addEventListener('change', (e) => {
       this.currentPeriod = e.target.value;
+      this.updateFilterSummary();
+      this.loadData();
+    });
+
+    document.getElementById('activitySelect').addEventListener('change', (e) => {
+      this.currentActivity = e.target.value;
+      this.updateFilterSummary();
+      this.loadData();
+    });
+
+    document.getElementById('orderTypeSelect').addEventListener('change', (e) => {
+      this.currentOrderType = e.target.value;
+      this.updateFilterSummary();
       this.loadData();
     });
 
@@ -162,6 +203,31 @@ class CustomerGroupsManager {
     document.getElementById('exportBtn').addEventListener('click', () => {
       this.exportData();
     });
+  }
+
+  updateFilterSummary() {
+    const periodLabels = {
+      '1month': 'Last 30 Days',
+      '3months': 'Last 3 Months', 
+      '6months': 'Last 6 Months',
+      '1year': 'Last Year'
+    };
+    
+    const activityLabels = {
+      'all': 'All Customers',
+      'active': 'Active Customers',
+      'inactive': 'Inactive Customers'
+    };
+    
+    const orderTypeLabels = {
+      'all': 'All Order Types',
+      'service': 'Service Orders Only',
+      'sales': 'Sales Orders Only', 
+      'consultation': 'Consultation Orders Only'
+    };
+    
+    const summary = `${periodLabels[this.currentPeriod]} - ${activityLabels[this.currentActivity]} - ${orderTypeLabels[this.currentOrderType]}`;
+    document.getElementById('filterSummary').textContent = summary;
   }
 
   showLoading() {
@@ -178,8 +244,13 @@ class CustomerGroupsManager {
     this.showLoading();
     
     try {
-      const response = await fetch(`/api/customer-groups-data/?period=${this.currentPeriod}&group=${this.currentGroup}`);
+      const url = `/api/customer-groups-data-fixed/?period=${this.currentPeriod}&group=${this.currentGroup}&activity=${this.currentActivity}&order_type=${this.currentOrderType}`;
+      console.log('Loading data from:', url);
+      
+      const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('Received data:', data);
       
       if (data.success) {
         this.renderOverview(data.totals);
@@ -187,6 +258,12 @@ class CustomerGroupsManager {
         
         if (data.group_details) {
           this.renderGroupDetails(data.group_details);
+        }
+        
+        // Update filter summary with actual data
+        if (data.period_label) {
+          const summary = `${data.period_label} (${data.date_range.start} to ${data.date_range.end}) - ${data.filters.activity} - ${data.filters.order_type}`;
+          document.getElementById('filterSummary').innerHTML = `<strong>Showing:</strong> ${summary}`;
         }
       }
     } catch (error) {
@@ -267,8 +344,11 @@ class CustomerGroupsManager {
     this.showLoading();
     
     try {
-      const response = await fetch(`/api/customer-groups-data/?period=${this.currentPeriod}&group=${type}`);
+      const url = `/api/customer-groups-data-fixed/?period=${this.currentPeriod}&group=${type}&activity=${this.currentActivity}&order_type=${this.currentOrderType}`;
+      const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('Group details data:', data);
       
       if (data.success && data.group_details) {
         this.renderGroupDetails(data.group_details, name);
@@ -300,10 +380,10 @@ class CustomerGroupsManager {
       <div class="d-flex justify-content-between align-items-center">
         <div>
           <h5 class="mb-0">${groupName || details.stats.name} - Customer Details</h5>
-          <small class="text-muted">${details.customers.length} customers in this group</small>
+          <small class="text-muted">${details.customers.length} customers in this type</small>
         </div>
         <button class="btn btn-outline-primary" onclick="customerGroupsManager.showAllGroups()">
-          <i class="fa fa-arrow-left me-1"></i> Back to All Groups
+          <i class="fa fa-arrow-left me-1"></i> Back to All Types
         </button>
       </div>
     `;
@@ -382,7 +462,7 @@ class CustomerGroupsManager {
                 <td class="fw-bold">$${customer.total_spent}</td>
                 <td>${customer.last_order_date ? new Date(customer.last_order_date).toLocaleDateString() : '-'}</td>
                 <td>
-                  <a href="/customer/${customer.id}/" class="btn btn-sm btn-outline-primary">View</a>
+                  <a href="/customers/${customer.id}/" class="btn btn-sm btn-outline-primary">View</a>
                 </td>
               </tr>
             `).join('')}
@@ -402,6 +482,7 @@ class CustomerGroupsManager {
 let customerGroupsManager;
 document.addEventListener('DOMContentLoaded', () => {
   customerGroupsManager = new CustomerGroupsManager();
+  customerGroupsManager.updateFilterSummary();
 });
 </script>
 {% endblock %}
