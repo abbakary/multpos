@@ -2287,11 +2287,7 @@ def complete_order(request: HttpRequest, pk: int):
     if request.method != 'POST':
         return redirect('tracker:order_detail', pk=o.id)
 
-    password = request.POST.get('password', '')
-    if not password or not request.user.check_password(password):
-        messages.error(request, 'Password confirmation failed. Please enter your account password to sign.')
-        return redirect('tracker:order_detail', pk=o.id)
-
+    # No password confirmation required; require a signature image or completion file
     sig = request.FILES.get('signature_file')
     att = request.FILES.get('completion_attachment')
     if not sig and not att:
