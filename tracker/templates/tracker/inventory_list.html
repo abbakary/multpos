@@ -31,7 +31,7 @@
             <select name="brand" class="form-select">
               <option value="">All</option>
               {% for b in brands %}
-              <option value="{{ b.id }}" {% ifselected_brand == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>
+              <option value="{{ b.id }}" {% if selected_brand == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>
               {% endfor %}
             </select>
           </div>
