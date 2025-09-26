@@ -2426,7 +2426,7 @@ def analytics(request: HttpRequest):
         end_date = today
         labels = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(30)]
 
-    qs = Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+    qs = scope_queryset(Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date), request.user, request)
     status_counts = {row['status']: row['c'] for row in qs.values('status').annotate(c=Count('id'))}
     type_counts = {row['type']: row['c'] for row in qs.values('type').annotate(c=Count('id'))}
     priority_counts = {row['priority']: row['c'] for row in qs.values('priority').annotate(c=Count('id'))}
