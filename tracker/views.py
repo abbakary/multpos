@@ -542,7 +542,8 @@ def customers_search(request: HttpRequest):
 
 @login_required
 def customer_detail(request: HttpRequest, pk: int):
-    c = get_object_or_404(Customer, pk=pk)
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+    c = get_object_or_404(customers_qs, pk=pk)
     vehicles = c.vehicles.all()
     orders = c.orders.order_by("-created_at")[:20]
 
