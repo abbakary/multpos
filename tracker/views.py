@@ -4405,8 +4405,8 @@ def analytics_revenue(request: HttpRequest):
         end_date = today
     
     # Get orders in the period
-    qs = Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
-    
+    qs = scope_queryset(Order.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date), request.user, request)
+
     # Revenue metrics (placeholder - would need actual pricing data)
     total_orders = qs.count()
     completed_orders = qs.filter(status='completed').count()
