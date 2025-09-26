@@ -255,7 +255,7 @@ def dashboard(request: HttpRequest):
             'average_order_value': average_order_value,
             'upcoming_appointments': list(upcoming_appointments.values('id', 'customer__full_name', 'created_at')),
             'top_customers': list(top_customers.values('id', 'full_name', 'order_count', 'phone', 'email', 'total_spent', 'latest_order_date', 'registration_date')),
-            'recent_orders': list(Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at").values('id', 'customer__full_name', 'status', 'created_at')[:10]),
+            'recent_orders': list(orders_qs.select_related("customer").exclude(status="completed").order_by("-created_at").values('id', 'customer__full_name', 'status', 'created_at')[:10]),
             'inventory_metrics': {
                 'total_items': total_inventory_items,
                 'total_stock': total_stock,
