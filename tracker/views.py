@@ -373,8 +373,8 @@ def dashboard(request: HttpRequest):
     }
 
     from django.db.models.functions import TruncHour
-    hourly_total_qs = Order.objects.filter(type="sales", created_at__date=today).annotate(h=TruncHour("created_at")).values("h").annotate(c=Count("id"))
-    hourly_completed_qs = Order.objects.filter(type="sales", status="completed", completed_at__date=today).annotate(h=TruncHour("completed_at")).values("h").annotate(c=Count("id"))
+    hourly_total_qs = orders_qs.filter(type="sales", created_at__date=today).annotate(h=TruncHour("created_at")).values("h").annotate(c=Count("id"))
+    hourly_completed_qs = orders_qs.filter(type="sales", status="completed", completed_at__date=today).annotate(h=TruncHour("completed_at")).values("h").annotate(c=Count("id"))
     hourly_total_map = {row["h"].hour: row["c"] for row in hourly_total_qs if row["h"]}
     hourly_completed_map = {row["h"].hour: row["c"] for row in hourly_completed_qs if row["h"]}
     hours = list(range(0, 24))
