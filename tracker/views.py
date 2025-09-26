@@ -849,18 +849,20 @@ def customer_register(request: HttpRequest):
                                 return redirect(detail_url)
                     
                         # If quick save, create the customer immediately
-                    c = Customer.objects.create(
-                        full_name=full_name,
-                        phone=phone,
-                        whatsapp=data.get("whatsapp"),
-                        email=data.get("email"),
-                        address=data.get("address"),
-                        notes=data.get("notes"),
-                        customer_type=data.get("customer_type"),
-                        organization_name=data.get("organization_name"),
-                        tax_number=data.get("tax_number"),
-                        personal_subtype=data.get("personal_subtype"),
-                    )
+                    from .utils import get_user_branch
+                c = Customer.objects.create(
+                    full_name=full_name,
+                    phone=phone,
+                    whatsapp=data.get("whatsapp"),
+                    email=data.get("email"),
+                    address=data.get("address"),
+                    notes=data.get("notes"),
+                    customer_type=data.get("customer_type"),
+                    organization_name=data.get("organization_name"),
+                    tax_number=data.get("tax_number"),
+                    personal_subtype=data.get("personal_subtype"),
+                    branch=get_user_branch(request.user)
+                )
                     
                     # Clear session data after saving
                     if 'reg_step1' in request.session:
@@ -1040,6 +1042,7 @@ def customer_register(request: HttpRequest):
                     return redirect(detail_url)
                 
                 # Create new customer if no duplicate found
+                from .utils import get_user_branch
                 c = Customer.objects.create(
                     full_name=full_name,
                     phone=phone,
@@ -1051,6 +1054,7 @@ def customer_register(request: HttpRequest):
                     organization_name=data.get("organization_name"),
                     tax_number=data.get("tax_number"),
                     personal_subtype=data.get("personal_subtype"),
+                    branch=get_user_branch(request.user)
                 )
                 
                 # Create vehicle if vehicle information is provided
@@ -1106,9 +1110,11 @@ def customer_register(request: HttpRequest):
                             desc_addons = (", addons: " + ", ".join(tire_services)) if tire_services else ""
                             final_description = description or f"Tire Sales: {item.name} ({item.brand.name}) - {tire_type}{desc_addons}"
                             
+                            from .utils import get_user_branch
                             o = Order.objects.create(
                                 customer=c,
                                 vehicle=v,
+                                branch=get_user_branch(request.user),
                                 type="sales",
                                 item_name=item.name,
                                 brand=item.brand.name,
@@ -1152,9 +1158,11 @@ def customer_register(request: HttpRequest):
                     final_description = description or f"Car Service{desc_svcs}"
                     estimated_duration = step3_data.get('estimated_duration') or request.POST.get("estimated_duration")
                     
+                    from .utils import get_user_branch
                     o = Order.objects.create(
                         customer=c,
                         vehicle=v,
+                        branch=get_user_branch(request.user),
                         type="service",
                         status="created",
                         description=final_description,
@@ -1176,9 +1184,11 @@ def customer_register(request: HttpRequest):
                     
                     final_description = description or f"Inquiry: {inquiry_type} - {questions}"
                     
+                    from .utils import get_user_branch
                     o = Order.objects.create(
                         customer=c,
                         vehicle=v,
+                        branch=get_user_branch(request.user),
                         type="inquiry",
                         status="created",
                         description=final_description,
@@ -1347,8 +1357,10 @@ def create_order_for_customer(request: HttpRequest, pk: int):
         # Ensure vehicle belongs to this customer
         form.fields["vehicle"].queryset = c.vehicles.all()
         if form.is_valid():
+            from .utils import get_user_branch
             o = form.save(commit=False)
             o.customer = c
+            o.branch = get_user_branch(request.user)
             o.status = "created"
             
             # Handle vehicle creation if new vehicle info is provided
