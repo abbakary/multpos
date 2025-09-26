@@ -200,7 +200,7 @@ def dashboard(request: HttpRequest):
 
         # Upcoming appointments (next 7 days) based on active orders
         upcoming_appointments = (
-            Order.objects.filter(
+            orders_qs.filter(
                 status__in=["created", "in_progress"],
                 created_at__date__gte=today,
                 created_at__date__lte=today + timedelta(days=7),
