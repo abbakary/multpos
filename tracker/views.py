@@ -309,8 +309,8 @@ def dashboard(request: HttpRequest):
         # Get orders from last 12 months without complex date truncation
         twelve_months_ago = today - timedelta(days=365)
         
-        total_orders = Order.objects.filter(type="sales", created_at__date__gte=twelve_months_ago).count()
-        completed_orders = Order.objects.filter(type="sales", status="completed", created_at__date__gte=twelve_months_ago).count()
+        total_orders = orders_qs.filter(type="sales", created_at__date__gte=twelve_months_ago).count()
+        completed_orders = orders_qs.filter(type="sales", status="completed", created_at__date__gte=twelve_months_ago).count()
         
         # Use current month as key for simplicity
         current_month = today.replace(day=1)
