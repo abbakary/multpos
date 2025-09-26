@@ -268,7 +268,7 @@ def dashboard(request: HttpRequest):
 
     # Always fresh data for fast-updating sections
     recent_orders = list(
-        Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
+        orders_qs.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
     # Fix completed today calculation - MySQL compatible
     from datetime import date
