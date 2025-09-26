@@ -360,8 +360,8 @@ def dashboard(request: HttpRequest):
         # Get last 7 days data
         for i in range(7):
             date = today - timedelta(days=i)
-            total = Order.objects.filter(type="sales", created_at__date=date).count()
-            completed = Order.objects.filter(type="sales", status="completed", created_at__date=date).count()
+            total = orders_qs.filter(type="sales", created_at__date=date).count()
+            completed = orders_qs.filter(type="sales", status="completed", created_at__date=date).count()
             daily_total_map[date] = total
             daily_completed_map[date] = completed
     except Exception:
