@@ -338,8 +338,8 @@ def dashboard(request: HttpRequest):
     
     try:
         # Get today's data without complex date truncation
-        today_total = Order.objects.filter(type="sales", created_at__date=today).count()
-        today_completed = Order.objects.filter(type="sales", status="completed", created_at__date=today).count()
+        today_total = orders_qs.filter(type="sales", created_at__date=today).count()
+        today_completed = orders_qs.filter(type="sales", status="completed", created_at__date=today).count()
         
         daily_total_prev_map[today] = today_total
         daily_completed_prev_map[today] = today_completed
