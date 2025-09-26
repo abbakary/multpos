@@ -567,7 +567,7 @@ def customer_detail(request: HttpRequest, pk: int):
     months = list(reversed(months))
 
     month_counts_qs = (
-        Order.objects.filter(customer=c)
+        scope_queryset(Order.objects.filter(customer=c), request.user, request)
         .annotate(m=TruncMonth("created_at"))
         .values("m")
         .annotate(c=Count("id"))
