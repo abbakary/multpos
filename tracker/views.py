@@ -278,7 +278,7 @@ def dashboard(request: HttpRequest):
     today_start, today_end = get_date_range(today)
     
     # Count completed orders by completed_at date (if set) or created_at date - MySQL compatible
-    completed_today = Order.objects.filter(
+    completed_today = orders_qs.filter(
         status="completed"
     ).filter(
         Q(completed_at__gte=today_start, completed_at__lte=today_end) |
