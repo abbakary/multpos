@@ -444,7 +444,8 @@ def customers_list(request: HttpRequest):
 
     from django.db.models import Count
 
-    qs = Customer.objects.all().annotate(
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+    qs = customers_qs.annotate(
         returning_dates=Count('orders__created_at__date', distinct=True)
     ).order_by('-registration_date')
     if q:
