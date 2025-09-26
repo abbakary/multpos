@@ -5,6 +5,7 @@ from django.contrib.auth.views import LogoutView
 from . import views
 from .views import CustomLoginView, CustomLogoutView
 from .views_api_fix import api_customer_groups_data_fixed
+from . import branch_metrics as views_branch
 
 app_name = "tracker"
 
