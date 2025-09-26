@@ -193,7 +193,7 @@ def dashboard(request: HttpRequest):
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
         average_order_value = 0
-        pending_inquiries_count = Order.objects.filter(
+        pending_inquiries_count = orders_qs.filter(
             type="inquiry",
             status__in=["created", "in_progress"],
         ).count()
