@@ -113,7 +113,7 @@ def api_orders_statuses(request: HttpRequest):
         ids = [int(x) for x in ids_param.replace(',', ' ').split() if x.isdigit()]
     except Exception:
         ids = []
-    qs = Order.objects.filter(id__in=ids)
+    qs = scope_queryset(Order.objects.filter(id__in=ids), request.user, request)
     out = {}
     for o in qs:
         out[str(o.id)] = {
@@ -2022,7 +2022,7 @@ def orders_list(request: HttpRequest):
     date_range = request.GET.get("date_range", "")
     customer_id = request.GET.get("customer", "")
 
-    orders = Order.objects.select_related("customer", "vehicle").order_by("-created_at")
+    orders = scope_queryset(Order.objects.select_related("customer", "vehicle").order_by("-created_at"), request.user, request)
 
     # Apply filters
     if status == "overdue":
@@ -2052,11 +2052,11 @@ def orders_list(request: HttpRequest):
         orders = orders.filter(created_at__gte=start_year)
 
     # Get counts for stats
-    total_orders = Order.objects.count()
-    pending_orders = Order.objects.filter(status="created").count()
-    active_orders = Order.objects.filter(status__in=["created", "in_progress", "overdue"]).count()
-    completed_today = Order.objects.filter(status="completed", completed_at__date=timezone.localdate()).count()
-    urgent_orders = Order.objects.filter(priority="urgent").count()
+    total_orders = scope_queryset(Order.objects.all(), request.user, request).count()
+    pending_orders = scope_queryset(Order.objects.filter(status="created"), request.user, request).count()
+    active_orders = scope_queryset(Order.objects.filter(status__in=["created", "in_progress", "overdue"]), request.user, request).count()
+    completed_today = scope_queryset(Order.objects.filter(status="completed", completed_at__date=timezone.localdate()), request.user, request).count()
+    urgent_orders = scope_queryset(Order.objects.filter(priority="urgent"), request.user, request).count()
     revenue_today = 0
 
     paginator = Paginator(orders, 20)
@@ -2491,7 +2491,7 @@ def analytics(request: HttpRequest):
         'total_orders': qs.count(),
         'completed': qs.filter(status='completed').count(),
         'in_progress': qs.filter(status__in=['created','in_progress']).count(),
-        'customers': Customer.objects.filter(registration_date__date__range=[start_date, end_date]).count(),
+        'customers': scope_queryset(Customer.objects.filter(registration_date__date__range=[start_date, end_date]), request.user, request).count(),
     }
 
     return render(request, 'tracker/analytics.html', {
@@ -2666,7 +2666,7 @@ def reports_export(request: HttpRequest):
 @login_required
 def customers_export(request: HttpRequest):
     q = request.GET.get('q','').strip()
-    qs = Customer.objects.all().order_by('-registration_date')
+    qs = scope_queryset(Customer.objects.all().order_by('-registration_date'), request.user, request)
     if q:
         qs = qs.filter(full_name__icontains=q)
     import csv
@@ -2836,7 +2836,7 @@ def api_check_customer_duplicate(request: HttpRequest):
 
 @login_required
 def api_recent_orders(request: HttpRequest):
-    recents = Order.objects.select_related("customer", "vehicle").exclude(status="completed").order_by("-created_at")[:10]
+    recents = scope_queryset(Order.objects.select_related("customer", "vehicle").exclude(status="completed").order_by("-created_at"), request.user, request)[:10]
     data = [
         {
             "order_number": r.order_number,
@@ -3843,7 +3843,7 @@ def inquiries(request: HttpRequest):
     follow_up = request.GET.get('follow_up', '')
 
     # Base queryset for inquiry orders (inquiries)
-    queryset = Order.objects.filter(type='inquiry').select_related('customer').order_by('-created_at')
+    queryset = scope_queryset(Order.objects.filter(type='inquiry').select_related('customer').order_by('-created_at'), request.user, request)
 
     # Apply filters
     if inquiry_type:
@@ -3868,9 +3868,9 @@ def inquiries(request: HttpRequest):
 
     # Statistics
     stats = {
-        'new': Order.objects.filter(type='inquiry', status='created').count(),
-        'in_progress': Order.objects.filter(type='inquiry', status='in_progress').count(),
-        'resolved': Order.objects.filter(type='inquiry', status='completed').count(),
+        'new': scope_queryset(Order.objects.filter(type='inquiry', status='created'), request.user, request).count(),
+        'in_progress': scope_queryset(Order.objects.filter(type='inquiry', status='in_progress'), request.user, request).count(),
+        'resolved': scope_queryset(Order.objects.filter(type='inquiry', status='completed'), request.user, request).count(),
     }
 
     context = {
@@ -4042,16 +4042,16 @@ def reports_advanced(request: HttpRequest):
 
     # Reuse filtered querysets for consistency
     qs = Order.objects.filter(created_at__gte=start_dt, created_at__lt=end_dt)
-    cqs = Customer.objects.filter(registration_date__gte=start_dt, registration_date__lt=end_dt)
+    cqs = scope_queryset(Customer.objects.filter(registration_date__gte=start_dt, registration_date__lt=end_dt), request.user, request)
 
     # Base statistics
     total_orders = qs.count()
     # Completed counted by completion time within the selected period
-    completed_orders = Order.objects.filter(
+    completed_orders = scope_queryset(Order.objects.filter(
         completed_at__gte=start_dt,
         completed_at__lt=end_dt,
         status='completed',
-    ).count()
+    ), request.user, request).count()
     pending_orders = qs.filter(status__in=['created', 'in_progress']).count()
     total_customers = cqs.count()
 
@@ -4469,7 +4469,7 @@ def analytics_customer(request: HttpRequest):
             f_from = f_from or start.isoformat()
             f_to = f_to or today.isoformat()
 
-    qs = Customer.objects.all()
+    qs = scope_queryset(Customer.objects.all(), request.user, request)
     if f_from:
         try:
             from datetime import datetime
@@ -4488,7 +4488,7 @@ def analytics_customer(request: HttpRequest):
     # KPIs with enhanced contact information analysis
     totals = {
         "new_customers": qs.count(),
-        "total_customers": Customer.objects.count(),
+        "total_customers": scope_queryset(Customer.objects.all(), request.user, request).count(),
         "with_email": qs.exclude(email__isnull=True).exclude(email="").count(),
         "with_phone": qs.exclude(phone__isnull=True).exclude(phone="").count(),
         "with_whatsapp": qs.filter(Q(whatsapp__isnull=False) & ~Q(whatsapp="")).count(),
@@ -4553,7 +4553,7 @@ def analytics_customer(request: HttpRequest):
     # Top customers by visits and spend (overall, not only period-limited)
     from django.db.models import Max
     top_customers = (
-        Customer.objects.annotate(order_count=Count("orders"), latest_order_date=Max("orders__created_at"))
+        scope_queryset(Customer.objects.all(), request.user, request).annotate(order_count=Count("orders"), latest_order_date=Max("orders__created_at"))
         .filter(order_count__gt=0)
         .order_by("-order_count")[:10]
     )
@@ -4654,7 +4654,7 @@ def analytics_service(request: HttpRequest):
     end_date = parse_d(f_to) or today
 
     # Query base within created_at date range - ensure proper date filtering
-    qs = Order.objects.all().select_related("customer")
+    qs = scope_queryset(Order.objects.all().select_related("customer"), request.user, request)
     qs = qs.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
 
     # Counts by type and status
