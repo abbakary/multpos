@@ -166,7 +166,7 @@ def dashboard(request: HttpRequest):
                 status_counts[status] = 0
 
         # Ensure we have a count for completed orders, even if it's zero
-        completed_orders = Order.objects.filter(status="completed").count()
+        completed_orders = orders_qs.filter(status="completed").count()
         completion_rate = (completed_orders / total_orders * 100) if total_orders > 0 else 0
         
         # Update status_counts to ensure 'completed' key exists
