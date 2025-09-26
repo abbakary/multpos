@@ -187,7 +187,7 @@ def dashboard(request: HttpRequest):
 
         # New customers this month - MySQL compatible
         from .utils.mysql_compat import month_start_filter
-        new_customers_this_month = Customer.objects.filter(
+        new_customers_this_month = customers_qs.filter(
             month_start_filter('registration_date')
         ).count()
 
