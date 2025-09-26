@@ -111,6 +111,42 @@ def clear_audit_logs() -> None:
     cache.delete('audit_logs')
 
 
+# ---- Branch scoping helpers ----------------------------------------------
+
+def get_user_branch(user):
+    """Return Branch instance assigned to user's profile, if any."""
+    try:
+        p = getattr(user, 'profile', None)
+        return getattr(p, 'branch', None)
+    except Exception:
+        return None
+
+
+def scope_queryset(qs, user, request=None):
+    """Scope a queryset to the user's branch unless superuser.
+    If admin passes ?branch=<id>, use that branch.
+    Applies only if model has a 'branch' field.
+    """
+    try:
+        model = qs.model
+        branch_field = next((f for f in model._meta.fields if f.name == 'branch'), None)
+        if not branch_field:
+            return qs
+        # Superusers: allow optional branch filter via querystring
+        if getattr(user, 'is_superuser', False):
+            if request:
+                b_id = request.GET.get('branch')
+                if b_id and b_id.isdigit():
+                    return qs.filter(branch_id=int(b_id))
+            return qs
+        # Staff/regular users: restrict to their assigned branch
+        b = get_user_branch(user)
+        if b:
+            return qs.filter(branch=b)
+        return qs.none()
+    except Exception:
+        return qs
+
 # ---- Inventory helpers ----------------------------------------------------
 
 def clear_inventory_cache(name: str | None = None, brand: str | None = None) -> None:

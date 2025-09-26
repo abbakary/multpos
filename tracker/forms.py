@@ -4,7 +4,7 @@ import random
 import json
 from django import forms
 from django.contrib.auth.models import User, Group
-from .models import Customer, Order, Vehicle, InventoryItem, Profile, InventoryAdjustment
+from .models import Customer, Order, Vehicle, InventoryItem, Profile, InventoryAdjustment, Branch
 
 # ... (rest of the code remains the same)
 
@@ -803,6 +803,12 @@ class AdminUserCreateForm(forms.ModelForm):
         label="Manager role",
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
     )
+    branch = forms.ModelChoiceField(
+        queryset=Branch.objects.filter(is_active=True).order_by('name'),
+        required=False,
+        label="Assigned Branch",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
 
     class Meta:
         model = User
@@ -833,6 +839,10 @@ class AdminUserCreateForm(forms.ModelForm):
         mgr, _ = Group.objects.get_or_create(name="manager")
         if self.cleaned_data.get('group_manager'):
             user.groups.add(mgr)
+        # Ensure profile and assign branch
+        profile, _ = Profile.objects.get_or_create(user=user)
+        profile.branch = self.cleaned_data.get('branch')
+        profile.save()
         return user
 
 class AdminUserForm(forms.ModelForm):
@@ -850,6 +860,12 @@ class AdminUserForm(forms.ModelForm):
         required=False,
         label="Confirm New Password",
         widget=forms.PasswordInput(attrs={'class': 'form-control'})
+    )
+    branch = forms.ModelChoiceField(
+        queryset=Branch.objects.filter(is_active=True).order_by('name'),
+        required=False,
+        label="Assigned Branch",
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
 
     class Meta:
@@ -872,6 +888,12 @@ class AdminUserForm(forms.ModelForm):
             self.fields['group_manager'].initial = self.instance and self.instance.pk and self.instance.groups.filter(id=mgr.id).exists()
         except Group.DoesNotExist:
             pass
+        # Prefill branch from profile if exists
+        try:
+            if self.instance and self.instance.pk and hasattr(self.instance, 'profile'):
+                self.fields['branch'].initial = getattr(self.instance.profile, 'branch', None)
+        except Exception:
+            pass
 
     def clean(self):
         cleaned = super().clean()
@@ -891,6 +913,10 @@ class AdminUserForm(forms.ModelForm):
             user.groups.add(mgr)
         else:
             user.groups.remove(mgr)
+        # Assign branch on profile
+        profile, _ = Profile.objects.get_or_create(user=user)
+        profile.branch = self.cleaned_data.get('branch')
+        profile.save()
         p1 = self.cleaned_data.get('new_password')
         if p1:
             user.set_password(p1)

@@ -133,16 +133,20 @@ def dashboard(request: HttpRequest):
     # Always calculate fresh metrics for accurate data
     today = timezone.localdate()
     
+    # Branch-scoped base querysets
+    orders_qs = scope_queryset(Order.objects.all(), request.user, request)
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+
     # Remove caching to ensure fresh data
     metrics = None
-    
-    if True:  # Always recalculate
-        total_orders = Order.objects.count()
-        total_customers = Customer.objects.count()
 
-        status_counts_qs = Order.objects.values("status").annotate(c=Count("id"))
-        type_counts_qs = Order.objects.values("type").annotate(c=Count("id"))
-        priority_counts_qs = Order.objects.values("priority").annotate(c=Count("id"))
+    if True:  # Always recalculate
+        total_orders = orders_qs.count()
+        total_customers = customers_qs.count()
+
+        status_counts_qs = orders_qs.values("status").annotate(c=Count("id"))
+        type_counts_qs = orders_qs.values("type").annotate(c=Count("id"))
+        priority_counts_qs = orders_qs.values("priority").annotate(c=Count("id"))
 
         status_counts = {x["status"]: x["c"] for x in status_counts_qs}
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
@@ -150,7 +154,7 @@ def dashboard(request: HttpRequest):
 
         # Count persisted overdue
         try:
-            overdue_count = Order.objects.filter(status="overdue").count()
+            overdue_count = orders_qs.filter(status="overdue").count()
             status_counts["overdue"] = overdue_count
         except Exception:
             status_counts.setdefault("overdue", 0)
@@ -162,7 +166,7 @@ def dashboard(request: HttpRequest):
                 status_counts[status] = 0
 
         # Ensure we have a count for completed orders, even if it's zero
-        completed_orders = Order.objects.filter(status="completed").count()
+        completed_orders = orders_qs.filter(status="completed").count()
         completion_rate = (completed_orders / total_orders * 100) if total_orders > 0 else 0
         
         # Update status_counts to ensure 'completed' key exists
@@ -172,7 +176,7 @@ def dashboard(request: HttpRequest):
         today_date = timezone.localdate()
         
         # Count completed orders by completed_at date (if set) or created_at date
-        completed_today_count = Order.objects.filter(
+        completed_today_count = orders_qs.filter(
             status="completed"
         ).extra(
             where=[
@@ -183,20 +187,20 @@ def dashboard(request: HttpRequest):
 
         # New customers this month - MySQL compatible
         from .utils.mysql_compat import month_start_filter
-        new_customers_this_month = Customer.objects.filter(
+        new_customers_this_month = customers_qs.filter(
             month_start_filter('registration_date')
         ).count()
 
         # Keep original fields/logic for compatibility, but use valid types/statuses
         average_order_value = 0
-        pending_inquiries_count = Order.objects.filter(
+        pending_inquiries_count = orders_qs.filter(
             type="inquiry",
             status__in=["created", "in_progress"],
         ).count()
 
         # Upcoming appointments (next 7 days) based on active orders
         upcoming_appointments = (
-            Order.objects.filter(
+            orders_qs.filter(
                 status__in=["created", "in_progress"],
                 created_at__date__gte=today,
                 created_at__date__lte=today + timedelta(days=7),
@@ -209,7 +213,7 @@ def dashboard(request: HttpRequest):
         from django.db.models import Max
 
         top_customers = (
-            Customer.objects.annotate(
+            customers_qs.annotate(
                 order_count=Count("orders"),
                 latest_order_date=Max("orders__created_at")
             )
@@ -251,7 +255,7 @@ def dashboard(request: HttpRequest):
             'average_order_value': average_order_value,
             'upcoming_appointments': list(upcoming_appointments.values('id', 'customer__full_name', 'created_at')),
             'top_customers': list(top_customers.values('id', 'full_name', 'order_count', 'phone', 'email', 'total_spent', 'latest_order_date', 'registration_date')),
-            'recent_orders': list(Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at").values('id', 'customer__full_name', 'status', 'created_at')[:10]),
+            'recent_orders': list(orders_qs.select_related("customer").exclude(status="completed").order_by("-created_at").values('id', 'customer__full_name', 'status', 'created_at')[:10]),
             'inventory_metrics': {
                 'total_items': total_inventory_items,
                 'total_stock': total_stock,
@@ -264,7 +268,7 @@ def dashboard(request: HttpRequest):
 
     # Always fresh data for fast-updating sections
     recent_orders = list(
-        Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
+        orders_qs.select_related("customer").exclude(status="completed").order_by("-created_at")[:10]
     )
     # Fix completed today calculation - MySQL compatible
     from datetime import date
@@ -274,7 +278,7 @@ def dashboard(request: HttpRequest):
     today_start, today_end = get_date_range(today)
     
     # Count completed orders by completed_at date (if set) or created_at date - MySQL compatible
-    completed_today = Order.objects.filter(
+    completed_today = orders_qs.filter(
         status="completed"
     ).filter(
         Q(completed_at__gte=today_start, completed_at__lte=today_end) |
@@ -305,8 +309,8 @@ def dashboard(request: HttpRequest):
         # Get orders from last 12 months without complex date truncation
         twelve_months_ago = today - timedelta(days=365)
         
-        total_orders = Order.objects.filter(type="sales", created_at__date__gte=twelve_months_ago).count()
-        completed_orders = Order.objects.filter(type="sales", status="completed", created_at__date__gte=twelve_months_ago).count()
+        total_orders = orders_qs.filter(type="sales", created_at__date__gte=twelve_months_ago).count()
+        completed_orders = orders_qs.filter(type="sales", status="completed", created_at__date__gte=twelve_months_ago).count()
         
         # Use current month as key for simplicity
         current_month = today.replace(day=1)
@@ -334,8 +338,8 @@ def dashboard(request: HttpRequest):
     
     try:
         # Get today's data without complex date truncation
-        today_total = Order.objects.filter(type="sales", created_at__date=today).count()
-        today_completed = Order.objects.filter(type="sales", status="completed", created_at__date=today).count()
+        today_total = orders_qs.filter(type="sales", created_at__date=today).count()
+        today_completed = orders_qs.filter(type="sales", status="completed", created_at__date=today).count()
         
         daily_total_prev_map[today] = today_total
         daily_completed_prev_map[today] = today_completed
@@ -356,8 +360,8 @@ def dashboard(request: HttpRequest):
         # Get last 7 days data
         for i in range(7):
             date = today - timedelta(days=i)
-            total = Order.objects.filter(type="sales", created_at__date=date).count()
-            completed = Order.objects.filter(type="sales", status="completed", created_at__date=date).count()
+            total = orders_qs.filter(type="sales", created_at__date=date).count()
+            completed = orders_qs.filter(type="sales", status="completed", created_at__date=date).count()
             daily_total_map[date] = total
             daily_completed_map[date] = completed
     except Exception:
@@ -369,8 +373,8 @@ def dashboard(request: HttpRequest):
     }
 
     from django.db.models.functions import TruncHour
-    hourly_total_qs = Order.objects.filter(type="sales", created_at__date=today).annotate(h=TruncHour("created_at")).values("h").annotate(c=Count("id"))
-    hourly_completed_qs = Order.objects.filter(type="sales", status="completed", completed_at__date=today).annotate(h=TruncHour("completed_at")).values("h").annotate(c=Count("id"))
+    hourly_total_qs = orders_qs.filter(type="sales", created_at__date=today).annotate(h=TruncHour("created_at")).values("h").annotate(c=Count("id"))
+    hourly_completed_qs = orders_qs.filter(type="sales", status="completed", completed_at__date=today).annotate(h=TruncHour("completed_at")).values("h").annotate(c=Count("id"))
     hourly_total_map = {row["h"].hour: row["c"] for row in hourly_total_qs if row["h"]}
     hourly_completed_map = {row["h"].hour: row["c"] for row in hourly_completed_qs if row["h"]}
     hours = list(range(0, 24))
@@ -404,7 +408,7 @@ def dashboard(request: HttpRequest):
     for p in ["today", "yesterday", "last_week", "last_month"]:
         start_d, end_d = _period_range(p)
         rows = (
-            Order.objects.filter(created_at__date__gte=start_d, created_at__date__lte=end_d)
+            orders_qs.filter(created_at__date__gte=start_d, created_at__date__lte=end_d)
             .values("customer__full_name")
             .annotate(c=Count("id"))
             .order_by("-c")[:5]
@@ -440,7 +444,8 @@ def customers_list(request: HttpRequest):
 
     from django.db.models import Count
 
-    qs = Customer.objects.all().annotate(
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+    qs = customers_qs.annotate(
         returning_dates=Count('orders__created_at__date', distinct=True)
     ).order_by('-registration_date')
     if q:
@@ -459,9 +464,9 @@ def customers_list(request: HttpRequest):
     # Stats - fix calculations with current date
     from datetime import date
     today_date = date.today()
-    active_customers = Customer.objects.filter(arrival_time__date=today_date).count()
-    new_customers_today = Customer.objects.filter(registration_date__date=today_date).count()
-    returning_customers = Customer.objects.filter(total_visits__gt=1).count()
+    active_customers = customers_qs.filter(arrival_time__date=today_date).count()
+    new_customers_today = customers_qs.filter(registration_date__date=today_date).count()
+    returning_customers = customers_qs.filter(total_visits__gt=1).count()
 
     paginator = Paginator(qs, 20)
     page = request.GET.get('page')
@@ -483,17 +488,18 @@ def customers_search(request: HttpRequest):
     details = request.GET.get("details")
 
     results = []
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
 
     if customer_id:
         try:
-            customer = Customer.objects.get(id=customer_id)
+            customer = customers_qs.get(id=customer_id)
             results = [customer]
         except Customer.DoesNotExist:
             pass
     elif recent:
-        results = Customer.objects.all().order_by('-last_visit', '-registration_date')[:10]
+        results = customers_qs.order_by('-last_visit', '-registration_date')[:10]
     elif q:
-        results = Customer.objects.filter(
+        results = customers_qs.filter(
             Q(full_name__icontains=q) |
             Q(phone__icontains=q) |
             Q(email__icontains=q) |
@@ -536,7 +542,8 @@ def customers_search(request: HttpRequest):
 
 @login_required
 def customer_detail(request: HttpRequest, pk: int):
-    c = get_object_or_404(Customer, pk=pk)
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+    c = get_object_or_404(customers_qs, pk=pk)
     vehicles = c.vehicles.all()
     orders = c.orders.order_by("-created_at")[:20]
 
@@ -560,7 +567,7 @@ def customer_detail(request: HttpRequest, pk: int):
     months = list(reversed(months))
 
     month_counts_qs = (
-        Order.objects.filter(customer=c)
+        scope_queryset(Order.objects.filter(customer=c), request.user, request)
         .annotate(m=TruncMonth("created_at"))
         .values("m")
         .annotate(c=Count("id"))
@@ -572,7 +579,7 @@ def customer_detail(request: HttpRequest, pk: int):
     }
 
     status_qs = (
-        Order.objects.filter(customer=c)
+        scope_queryset(Order.objects.filter(customer=c), request.user, request)
         .values("status")
         .annotate(c=Count("id"))
     )
@@ -1323,7 +1330,7 @@ def customer_register(request: HttpRequest):
 @login_required
 def start_order(request: HttpRequest):
     """Start a new order by selecting a customer"""
-    customers = Customer.objects.all().order_by('full_name')
+    customers = scope_queryset(Customer.objects.all(), request.user, request).order_by('full_name')
     return render(request, 'tracker/select_customer.html', {
         'customers': customers,
         'page_title': 'Select Customer for New Order'
