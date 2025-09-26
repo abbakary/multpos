@@ -6,6 +6,26 @@ from datetime import timedelta
 import uuid
 
 
+class Branch(models.Model):
+    """Business branch/location for multi-region scoping."""
+    name = models.CharField(max_length=128, unique=True)
+    code = models.CharField(max_length=32, unique=True)
+    region = models.CharField(max_length=128, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["code"], name="idx_branch_code"),
+            models.Index(fields=["region"], name="idx_branch_region"),
+        ]
+
+    def __str__(self) -> str:
+        r = f" ({self.region})" if self.region else ""
+        return f"{self.name}{r}"
+
+
 class Customer(models.Model):
     TYPE_CHOICES = [
         ("government", "Government"),
@@ -22,6 +42,7 @@ class Customer(models.Model):
     ]
 
     code = models.CharField(max_length=32, unique=True, editable=False)
+    branch = models.ForeignKey('Branch', on_delete=models.PROTECT, null=True, blank=True, related_name='customers')
     full_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20)
     whatsapp = models.CharField(max_length=20, blank=True, null=True, help_text="WhatsApp number (if different from phone)")
@@ -119,6 +140,7 @@ class Order(models.Model):
     PRIORITY_CHOICES = [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("urgent", "Urgent")]
 
     order_number = models.CharField(max_length=32, unique=True, editable=False)
+    branch = models.ForeignKey('Branch', on_delete=models.PROTECT, null=True, blank=True, related_name='orders')
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="orders")
     vehicle = models.ForeignKey(Vehicle, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders")
     type = models.CharField(max_length=16, choices=TYPE_CHOICES)
@@ -402,6 +424,7 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     photo = models.ImageField(upload_to=user_avatar_path, blank=True, null=True, help_text='User profile picture')
     timezone = models.CharField(max_length=100, default='UTC', help_text='User timezone for displaying dates and times')
+    branch = models.ForeignKey('Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='users', help_text='Assigned branch/location')
 
     def __str__(self):
         return f"{self.user.username}'s profile"
