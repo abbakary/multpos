@@ -2,7 +2,7 @@
 {% load static %}
 {% load date_filters %}
 
-{% block title %}Customer Groups - Advanced{% endblock %}
+{% block title %}Customer Types - {% endblock %}
 
 {% block extra_css %}
 <style>
@@ -43,7 +43,7 @@
 <div class="container-fluid">
   <div class="page-title">
     <div class="row">
-      <div class="col-6"><h4>Customer Types - Advanced</h4></div>
+      <div class="col-6"><h4>Customer Types </h4></div>
       <div class="col-6">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="{% url 'tracker:dashboard' %}">Home</a></li>
@@ -80,7 +80,7 @@
         <option value="all" selected>All Order Types</option>
         <option value="service">Service Only</option>
         <option value="sales">Sales Only</option>
-        <option value="consultation">Consultation Only</option>
+        <option value="inquiry">Inquiry Only</option>
       </select>
     </div>
     <div class="col-md-3 d-flex align-items-end">
@@ -223,7 +223,7 @@ class CustomerGroupsManager {
       'all': 'All Order Types',
       'service': 'Service Orders Only',
       'sales': 'Sales Orders Only', 
-      'consultation': 'Consultation Orders Only'
+      'inquiry': 'Inquiry Orders Only'
     };
     
     const summary = `${periodLabels[this.currentPeriod]} - ${activityLabels[this.currentActivity]} - ${orderTypeLabels[this.currentOrderType]}`;
@@ -436,7 +436,7 @@ class CustomerGroupsManager {
               <th>Total Orders</th>
               <th>Service</th>
               <th>Sales</th>
-              <th>Consultation</th>
+              <th>Inquiry</th>
               <th>Completed</th>
               <th>Revenue</th>
               <th>Last Order</th>
@@ -457,7 +457,7 @@ class CustomerGroupsManager {
                 <td><span class="badge bg-primary">${customer.total_orders}</span></td>
                 <td><span class="badge bg-success">${customer.service_orders}</span></td>
                 <td><span class="badge bg-warning">${customer.sales_orders}</span></td>
-                <td><span class="badge bg-info">${customer.consultation_orders}</span></td>
+                <td><span class="badge bg-info">${customer.inquiry_orders}</span></td>
                 <td><span class="badge bg-secondary">${customer.completed_orders}</span></td>
                 <td class="fw-bold">$${customer.total_spent}</td>
                 <td>${customer.last_order_date ? new Date(customer.last_order_date).toLocaleDateString() : '-'}</td>

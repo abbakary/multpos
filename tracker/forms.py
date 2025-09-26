@@ -626,7 +626,7 @@ class OrderForm(forms.ModelForm):
                 desc_services = "\nSelected services: " + ", ".join(dict(self.SERVICE_OPTIONS)[s] for s in services)
                 cleaned["description"] = (desc + desc_services).strip()
                 
-        elif t == "consultation":
+        elif t == "inquiry":
             if not cleaned.get("inquiry_type"):
                 self.add_error("inquiry_type", "Inquiry type is required")
             if not cleaned.get("questions"):

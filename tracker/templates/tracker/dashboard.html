@@ -389,11 +389,11 @@
       var svcCanvas = document.getElementById('serviceDistributionCanvas');
       if (svcCanvas) {
         var data = {
-          labels: ['Sales','Service','Consultation'],
+          labels: ['Sales','Service','Inquiry'],
           values: [
             {{ type_counts.sales|default:0 }},
             {{ type_counts.service|default:0 }},
-            {{ type_counts.consultation|default:0 }}
+            {{ type_counts.inquiry|default:0 }}
           ]
         };
         var colors = ['#4e79a7','#59a14f','#f28e2b'];

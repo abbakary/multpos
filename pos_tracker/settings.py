@@ -1,17 +1,21 @@
-import os
 from pathlib import Path
-import dj_database_url  # Make sure you install this
+import os
+import pymysql
 
-# Base directory
+# Install MySQL driver
+pymysql.install_as_MySQLdb()
+
+# Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: Keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-default-key")
+# Security key (DO NOT use this in production)
+SECRET_KEY = 'django-insecure-your-secret-key-here'
 
-# SECURITY WARNING: Don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "False") == "True"
+# Debug mode (set to False in production)
+DEBUG = True
 
-ALLOWED_HOSTS = ["your-render-url.onrender.com", "localhost", "127.0.0.1"]
+# Allowed hosts
+ALLOWED_HOSTS = ['*'] if DEBUG else ['yourdomain.com']
 
 # Application definition
 INSTALLED_APPS = [
@@ -28,15 +32,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # for static files
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "tracker.middleware.TimezoneMiddleware",
-    "tracker.middleware.AutoProgressOrdersMiddleware",
+    "tracker.middleware.TimezoneMiddleware",  # Custom middleware
+    "tracker.middleware.AutoProgressOrdersMiddleware",  # Auto-progress orders
 ]
 
 ROOT_URLCONF = "pos_tracker.urls"
@@ -60,47 +63,118 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "pos_tracker.wsgi.application"
 
-# --- DATABASE: PostgreSQL via dj_database_url ---
+# --- DATABASE CONFIGURATION (MySQL) ---
 DATABASES = {
-    "default": dj_database_url.config(
-        default=os.environ.get("DATABASE_URL")
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'posnew_db',
+        'USER': 'root',
+        'PASSWORD': '',  # Set your MySQL password here
+        'HOST': 'localhost',
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES', default_storage_engine=INNODB",
+            'charset': 'utf8mb4',
+            'autocommit': True,
+        },
+        'TIME_ZONE': 'Asia/Riyadh',
+        'CONN_MAX_AGE': 300,  # Optional: keep connections alive longer
+    }
 }
 
 # Timezone settings
-TIME_ZONE = "Asia/Riyadh"
+TIME_ZONE = 'Asia/Riyadh'
 USE_TZ = True
 
-# Password validation
-AUTH_PASSWORD_VALIDATORS = []
+# Password validation (disable for local/dev)
+AUTH_PASSWORD_VALIDATORS = [] if DEBUG else [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
 
-# Localization
+# Language and localization
 LANGUAGE_CODE = "en-us"
 USE_I18N = True
-USE_L10N = False
+USE_L10N = False  # Custom date formats below
 
 # Custom date/time formats
-DATE_FORMAT = "M d, Y"
-DATETIME_FORMAT = "M d, Y H:i"
-SHORT_DATE_FORMAT = "M d, Y"
-SHORT_DATETIME_FORMAT = "M d, Y H:i"
+DATE_FORMAT = 'M d, Y'
+DATETIME_FORMAT = 'M d, Y H:i'
+SHORT_DATE_FORMAT = 'M d, Y'
+SHORT_DATETIME_FORMAT = 'M d, Y H:i'
 
-# Static files (Render)
+# Static files (CSS, JS, etc.)
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "tracker" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Enable WhiteNoise for static file serving
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
 # Media files (uploads)
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
-# Default primary key field
+# Primary key auto field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Authentication redirects
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 LOGIN_URL = "/login/"
+
+# Session settings
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+
+# Security settings for production
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+
+# APScheduler configuration
+APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
+APSCHEDULER_RUN_NOW_TIMEOUT = 25  # Seconds
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'debug.log',
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'DEBUG' if DEBUG else 'INFO',
+    },
+}

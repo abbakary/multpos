@@ -152,7 +152,7 @@
         var t = (typeEl && (typeEl.value || typeEl.options && typeEl.options[typeEl.selectedIndex].value)) || '';
         document.getElementById('section-service').style.display = (t==='service')? 'block':'none';
         document.getElementById('section-sales').style.display = (t==='sales')? 'block':'none';
-        document.getElementById('section-consultation').style.display = (t==='consultation')? 'block':'none';
+        document.getElementById('section-inquiry').style.display = (t==='inquiry')? 'block':'none';
       }
       if(typeEl){ typeEl.addEventListener('change', updateSections); updateSections(); }
 

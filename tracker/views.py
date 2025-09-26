@@ -190,7 +190,7 @@ def dashboard(request: HttpRequest):
         # Keep original fields/logic for compatibility, but use valid types/statuses
         average_order_value = 0
         pending_inquiries_count = Order.objects.filter(
-            type="consultation",
+            type="inquiry",
             status__in=["created", "in_progress"],
         ).count()
 
@@ -250,7 +250,7 @@ def dashboard(request: HttpRequest):
             'pending_inquiries_count': pending_inquiries_count,
             'average_order_value': average_order_value,
             'upcoming_appointments': list(upcoming_appointments.values('id', 'customer__full_name', 'created_at')),
-            'top_customers': list(top_customers.values('id', 'full_name', 'order_count', 'phone', 'email', 'total_spent', 'latest_order_date')),
+            'top_customers': list(top_customers.values('id', 'full_name', 'order_count', 'phone', 'email', 'total_spent', 'latest_order_date', 'registration_date')),
             'recent_orders': list(Order.objects.select_related("customer").exclude(status="completed").order_by("-created_at").values('id', 'customer__full_name', 'status', 'created_at')[:10]),
             'inventory_metrics': {
                 'total_items': total_inventory_items,
@@ -715,8 +715,8 @@ def customer_register(request: HttpRequest):
         # For Step 3 Inquiry, prepare an OrderForm so template can render proper dropdowns
         try:
             if step == 3 and context.get('intent') == 'inquiry':
-                type_map = {"inquiry": "consultation"}
-                initial = {"type": type_map.get('inquiry', 'consultation')}
+                type_map = {"inquiry": "inquiry"}
+                initial = {"type": type_map.get('inquiry', 'inquiry')}
                 context['order_form'] = OrderForm(initial=initial)
                 context['order_type'] = initial['type']
         except Exception:
@@ -761,7 +761,7 @@ def customer_register(request: HttpRequest):
         # Provide complete context for step 4 to control which section renders and prefill fields
         if step == 4:
             _intent = ctx.get('intent')
-            type_map = {"service": "service", "sales": "sales", "inquiry": "consultation"}
+            type_map = {"service": "service", "sales": "sales", "inquiry": "inquiry"}
             order_initial = {"type": type_map.get(_intent)} if _intent in type_map else {}
             # Infer when needed from step3
             step3d = ctx.get('step3') or {}
@@ -772,7 +772,7 @@ def customer_register(request: HttpRequest):
                 elif step3d.get('service_selection') or step3d.get('service_type'):
                     inferred = 'service'
                 else:
-                    inferred = 'consultation'
+                    inferred = 'inquiry'
                 order_initial['type'] = inferred
             # Prefill from step3
             if order_initial['type'] == 'service':
@@ -928,7 +928,7 @@ def customer_register(request: HttpRequest):
             # If Inquiry, bypass CustomerStep3Form (which is for service type) and persist inquiry fields
             if _intent == 'inquiry':
                 step3_data = {
-                    'type': 'consultation',
+                    'type': 'inquiry',
                     'priority': (request.POST.get('priority') or '').strip(),
                     'vehicle': (request.POST.get('vehicle') or '').strip(),
                     'inquiry_type': (request.POST.get('inquiry_type') or '').strip(),
@@ -1172,7 +1172,7 @@ def customer_register(request: HttpRequest):
                     o = Order.objects.create(
                         customer=c,
                         vehicle=v,
-                        type="consultation",
+                        type="inquiry",
                         status="created",
                         description=final_description,
                         inquiry_type=inquiry_type,
@@ -1281,7 +1281,7 @@ def customer_register(request: HttpRequest):
         context["form"] = CustomerStep4Form()
         context["vehicle_form"] = VehicleForm()
         # Prefill order type based on intent and selected services
-        type_map = {"service": "service", "sales": "sales", "inquiry": "consultation"}
+        type_map = {"service": "service", "sales": "sales", "inquiry": "inquiry"}
         order_initial = {"type": type_map.get(intent)} if intent in type_map else {}
         # Prefill from step3
         step3d = context["step3"] or {}
@@ -1293,7 +1293,7 @@ def customer_register(request: HttpRequest):
             elif step3d.get("service_selection") or step3d.get("service_type"):
                 inferred = "service"
             else:
-                inferred = "consultation"
+                inferred = "inquiry"
             order_initial["type"] = inferred
             # also set intent in context for template logic
             context["intent"] = context.get("intent") or ("sales" if inferred=="sales" else ("service" if inferred=="service" else "inquiry"))
@@ -1433,7 +1433,7 @@ def customer_groups(request: HttpRequest):
     # Validate sort field
     valid_sort_fields = [
         'total_spent', 'recent_orders_count', 'last_order_date', 'first_order_date',
-        'service_orders', 'sales_orders', 'consultation_orders', 'completed_orders',
+        'service_orders', 'sales_orders', 'inquiry_orders', 'completed_orders',
         'cancelled_orders', 'vehicles_count'
     ]
     
@@ -1468,7 +1468,7 @@ def customer_groups(request: HttpRequest):
         first_order_date=Min('orders__created_at'),
         service_orders=Count('orders', filter=Q(orders__type='service', orders__created_at__date__gte=start_date)),
         sales_orders=Count('orders', filter=Q(orders__type='sales', orders__created_at__date__gte=start_date)),
-        consultation_orders=Count('orders', filter=Q(orders__type='consultation', orders__created_at__date__gte=start_date)),
+        inquiry_orders=Count('orders', filter=Q(orders__type='inquiry', orders__created_at__date__gte=start_date)),
         completed_orders=Count('orders', filter=Q(orders__status='completed', orders__created_at__date__gte=start_date)),
         cancelled_orders=Count('orders', filter=Q(orders__status='cancelled', orders__created_at__date__gte=start_date)),
         vehicles_count=Count('vehicles', distinct=True)
@@ -1526,7 +1526,7 @@ def customer_groups(request: HttpRequest):
             'avg_order_value': 0,
             'total_service_orders': 0,
             'total_sales_orders': 0,
-            'total_consultation_orders': 0,
+            'total_inquiry_orders': 0,
             'total_completed_orders': 0,
             'total_cancelled_orders': 0,
             'total_vehicles': 0,
@@ -1539,7 +1539,7 @@ def customer_groups(request: HttpRequest):
                 total_orders=Sum('recent_orders_count') or 0,
                 total_service_orders=Sum('service_orders') or 0,
                 total_sales_orders=Sum('sales_orders') or 0,
-                total_consultation_orders=Sum('consultation_orders') or 0,
+                total_inquiry_orders=Sum('inquiry_orders') or 0,
                 total_completed_orders=Sum('completed_orders') or 0,
                 total_cancelled_orders=Sum('cancelled_orders') or 0,
                 total_vehicles=Sum('vehicles_count') or 0,
@@ -1569,7 +1569,7 @@ def customer_groups(request: HttpRequest):
                 avg_order_value=Avg('total_spent') or 0,
                 total_service_orders=Sum('service_orders') or 0,
                 total_sales_orders=Sum('sales_orders') or 0,
-                total_consultation_orders=Sum('consultation_orders') or 0,
+                total_inquiry_orders=Sum('inquiry_orders') or 0,
                 total_completed_orders=Sum('completed_orders') or 0,
                 total_cancelled_orders=Sum('cancelled_orders') or 0,
                 total_vehicles=Sum('vehicles_count') or 0,
@@ -1838,7 +1838,7 @@ def api_customer_groups_data(request: HttpRequest):
             recent_orders=Count('orders', filter=Q(orders__created_at__date__gte=start_date)),
             service_orders=Count('orders', filter=Q(orders__type='service')),
             sales_orders=Count('orders', filter=Q(orders__type='sales')),
-            consultation_orders=Count('orders', filter=Q(orders__type='consultation')),
+            inquiry_orders=Count('orders', filter=Q(orders__type='inquiry')),
             completed_orders=Count('orders', filter=Q(orders__status='completed')),
             last_order_date=Max('orders__created_at'),
             vehicles_count=Count('vehicles', distinct=True)
@@ -1879,7 +1879,7 @@ def api_customer_groups_data(request: HttpRequest):
             recent_orders=Count('orders', filter=Q(orders__created_at__date__gte=start_date)),
             service_orders=Count('orders', filter=Q(orders__type='service')),
             sales_orders=Count('orders', filter=Q(orders__type='sales')),
-            consultation_orders=Count('orders', filter=Q(orders__type='consultation')),
+            inquiry_orders=Count('orders', filter=Q(orders__type='inquiry')),
             completed_orders=Count('orders', filter=Q(orders__status='completed')),
             last_order_date=Max('orders__created_at'),
             vehicles_count=Count('vehicles', distinct=True)
@@ -1888,7 +1888,7 @@ def api_customer_groups_data(request: HttpRequest):
         group_details = {
             'customers': list(customers.values(
                 'id', 'full_name', 'phone', 'email', 'total_spent', 'total_orders',
-                'recent_orders', 'service_orders', 'sales_orders', 'consultation_orders',
+                'recent_orders', 'service_orders', 'sales_orders', 'inquiry_orders',
                 'completed_orders', 'last_order_date', 'vehicles_count', 'registration_date'
             )[:50]),
             'stats': groups_data.get(group, {})
@@ -2461,11 +2461,11 @@ def analytics(request: HttpRequest):
             ]
         },
         'type': {
-            'labels': ['Service','Sales','Consultation'],
+            'labels': ['Service','Sales','inquiry'],
             'values': [
                 type_counts.get('service',0),
                 type_counts.get('sales',0),
-                type_counts.get('consultation',0),
+                type_counts.get('inquiry',0),
             ]
         },
         'priority': {
@@ -2601,11 +2601,11 @@ def reports(request: HttpRequest):
             ]
         },
         'type': {
-            'labels': ['Service','Sales','Consultation'],
+            'labels': ['Service','Sales','inquiry'],
             'values': [
                 type_counts.get('service',0),
                 type_counts.get('sales',0),
-                type_counts.get('consultation',0),
+                type_counts.get('inquiry',0),
             ]
         },
         'trend': {'labels': labels, 'values': values},
@@ -2712,7 +2712,7 @@ def customer_groups_export(request: HttpRequest):
         last_order_date=Max('orders__created_at'),
         service_orders=Count('orders', filter=Q(orders__type='service', orders__created_at__date__gte=start_date)),
         sales_orders=Count('orders', filter=Q(orders__type='sales', orders__created_at__date__gte=start_date)),
-        consultation_orders=Count('orders', filter=Q(orders__type='consultation', orders__created_at__date__gte=start_date)),
+        inquiry_orders=Count('orders', filter=Q(orders__type='inquiry', orders__created_at__date__gte=start_date)),
         completed_orders=Count('orders', filter=Q(orders__status='completed', orders__created_at__date__gte=start_date)),
         vehicles_count=Count('vehicles', distinct=True),
     )
@@ -2722,7 +2722,7 @@ def customer_groups_export(request: HttpRequest):
     resp = HttpResponse(content_type='text/csv')
     resp['Content-Disposition'] = 'attachment; filename="customer_group.csv"'
     w = csv.writer(resp)
-    w.writerow(['Code','Name','Phone','Type','Visits','Total Spent','Orders (period)','Service','Sales','Consultation','Completed (period)','Vehicles','Last Order'])
+    w.writerow(['Code','Name','Phone','Type','Visits','Total Spent','Orders (period)','Service','Sales','inquiry','Completed (period)','Vehicles','Last Order'])
     for c in qs.iterator():
         w.writerow([
             c.code,
@@ -2734,7 +2734,7 @@ def customer_groups_export(request: HttpRequest):
             c.recent_orders_count,
             c.service_orders,
             c.sales_orders,
-            c.consultation_orders,
+            c.inquiry_orders,
             c.completed_orders,
             c.vehicles_count,
             c.last_order_date.isoformat() if c.last_order_date else '',
@@ -3561,7 +3561,7 @@ def organization_management(request: HttpRequest):
         last_order_date=Max('orders__created_at'),
         service_orders=Count('orders', filter=Q(orders__type='service', orders__created_at__date__gte=start_date)),
         sales_orders=Count('orders', filter=Q(orders__type='sales', orders__created_at__date__gte=start_date)),
-        consultation_orders=Count('orders', filter=Q(orders__type='consultation', orders__created_at__date__gte=start_date)),
+        inquiry_orders=Count('orders', filter=Q(orders__type='inquiry', orders__created_at__date__gte=start_date)),
         completed_orders=Count('orders', filter=Q(orders__status='completed', orders__created_at__date__gte=start_date)),
         cancelled_orders=Count('orders', filter=Q(orders__status='cancelled', orders__created_at__date__gte=start_date)),
         vehicles_count=Count('vehicles', distinct=True)
@@ -3595,8 +3595,8 @@ def organization_management(request: HttpRequest):
     trend_values = [r['c'] for r in month_rows]
     charts = {
         'type': {
-            'labels': ['Service','Sales','Consultation'],
-            'values': [type_dist.get('service',0), type_dist.get('sales',0), type_dist.get('consultation',0)]
+            'labels': ['Service','Sales','inquiry'],
+            'values': [type_dist.get('service',0), type_dist.get('sales',0), type_dist.get('inquiry',0)]
         },
         'trend': {'labels': trend_labels, 'values': trend_values}
     }
@@ -3639,7 +3639,7 @@ def organization_export(request: HttpRequest):
         last_order_date=Max('orders__created_at'),
         service_orders=Count('orders', filter=Q(orders__type='service', orders__created_at__date__gte=start_date)),
         sales_orders=Count('orders', filter=Q(orders__type='sales', orders__created_at__date__gte=start_date)),
-        consultation_orders=Count('orders', filter=Q(orders__type='consultation', orders__created_at__date__gte=start_date)),
+        inquiry_orders=Count('orders', filter=Q(orders__type='inquiry', orders__created_at__date__gte=start_date)),
         completed_orders=Count('orders', filter=Q(orders__status='completed', orders__created_at__date__gte=start_date)),
         vehicles_count=Count('vehicles', distinct=True),
     )
@@ -3662,7 +3662,7 @@ def organization_export(request: HttpRequest):
             c.recent_orders_count,
             c.service_orders,
             c.sales_orders,
-            c.consultation_orders,
+            c.inquiry_orders,
             c.completed_orders,
             c.vehicles_count,
             c.last_order_date.isoformat() if c.last_order_date else ''
@@ -3835,8 +3835,8 @@ def inquiries(request: HttpRequest):
     status = request.GET.get('status', '')
     follow_up = request.GET.get('follow_up', '')
 
-    # Base queryset for consultation orders (inquiries)
-    queryset = Order.objects.filter(type='consultation').select_related('customer').order_by('-created_at')
+    # Base queryset for inquiry orders (inquiries)
+    queryset = Order.objects.filter(type='inquiry').select_related('customer').order_by('-created_at')
 
     # Apply filters
     if inquiry_type:
@@ -3861,9 +3861,9 @@ def inquiries(request: HttpRequest):
 
     # Statistics
     stats = {
-        'new': Order.objects.filter(type='consultation', status='created').count(),
-        'in_progress': Order.objects.filter(type='consultation', status='in_progress').count(),
-        'resolved': Order.objects.filter(type='consultation', status='completed').count(),
+        'new': Order.objects.filter(type='inquiry', status='created').count(),
+        'in_progress': Order.objects.filter(type='inquiry', status='in_progress').count(),
+        'resolved': Order.objects.filter(type='inquiry', status='completed').count(),
     }
 
     context = {
@@ -3880,7 +3880,7 @@ def inquiry_detail(request: HttpRequest, pk: int):
     """Get inquiry details for modal view"""
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         try:
-            inquiry = get_object_or_404(Order, pk=pk, type='consultation')
+            inquiry = get_object_or_404(Order, pk=pk, type='inquiry')
 
             data = {
                 'id': inquiry.id,
@@ -3911,7 +3911,7 @@ def inquiry_detail(request: HttpRequest, pk: int):
 def inquiry_respond(request: HttpRequest, pk: int):
     """Respond to a customer inquiry"""
     from .utils import send_sms
-    inquiry = get_object_or_404(Order, pk=pk, type='consultation')
+    inquiry = get_object_or_404(Order, pk=pk, type='inquiry')
 
     if request.method == 'POST':
         response_text = request.POST.get('response', '').strip()
@@ -3963,7 +3963,7 @@ def inquiry_respond(request: HttpRequest, pk: int):
 @login_required
 def update_inquiry_status(request: HttpRequest, pk: int):
     """Update inquiry status"""
-    inquiry = get_object_or_404(Order, pk=pk, type='consultation')
+    inquiry = get_object_or_404(Order, pk=pk, type='inquiry')
 
     if request.method == 'POST':
         new_status = request.POST.get('status')
@@ -4068,16 +4068,16 @@ def reports_advanced(request: HttpRequest):
         # Order type breakdown
         'service_orders': qs.filter(type='service').count(),
         'sales_orders': qs.filter(type='sales').count(),
-        'consultation_orders': qs.filter(type='consultation').count(),
+        'inquiry_orders': qs.filter(type='inquiry').count(),
     }
 
     # Calculate percentages
     if total_orders > 0:
         stats['service_percentage'] = int((stats['service_orders'] * 100) / total_orders)
         stats['sales_percentage'] = int((stats['sales_orders'] * 100) / total_orders)
-        stats['consultation_percentage'] = int((stats['consultation_orders'] * 100) / total_orders)
+        stats['inquiry_percentage'] = int((stats['inquiry_orders'] * 100) / total_orders)
     else:
-        stats['service_percentage'] = stats['sales_percentage'] = stats['consultation_percentage'] = 0
+        stats['service_percentage'] = stats['sales_percentage'] = stats['inquiry_percentage'] = 0
 
     # Real trend data per selected period
     qs = Order.objects.filter(created_at__gte=start_dt, created_at__lt=end_dt)
@@ -4108,8 +4108,8 @@ def reports_advanced(request: HttpRequest):
             ]
         },
         'orders': {
-            'labels': ['Service', 'Sales', 'Consultation'],
-            'values': [stats['service_orders'], stats['sales_orders'], stats['consultation_orders']]
+            'labels': ['Service', 'Sales', 'inquiry'],
+            'values': [stats['service_orders'], stats['sales_orders'], stats['inquiry_orders']]
         },
         'types': {
             'labels': ['Personal', 'Company', 'Government', 'NGO'],
@@ -4126,7 +4126,7 @@ def reports_advanced(request: HttpRequest):
     if report_type == 'customers':
         data_items = cqs.order_by('-registration_date')[:20]
     elif report_type == 'inquiries':
-        data_items = qs.filter(type='consultation').select_related('customer').order_by('-created_at')[:20]
+        data_items = qs.filter(type='inquiry').select_related('customer').order_by('-created_at')[:20]
     else:
         data_items = qs.select_related('customer').order_by('-created_at')[:20]
 
@@ -4409,11 +4409,11 @@ def analytics_revenue(request: HttpRequest):
     
     charts = {
         'type': {
-            'labels': ['Service', 'Sales', 'Consultation'],
+            'labels': ['Service', 'Sales', 'inquiry'],
             'values': [
                 type_counts.get('service', 0),
                 type_counts.get('sales', 0),
-                type_counts.get('consultation', 0),
+                type_counts.get('inquiry', 0),
             ]
         }
     }
@@ -4606,7 +4606,7 @@ def analytics_customer(request: HttpRequest):
 
 @login_required
 def analytics_service(request: HttpRequest):
-    """Service analytics using real Order data (sales/service/consultation)."""
+    """Service analytics using real Order data (sales/service/inquiry)."""
     from datetime import datetime
     from django.db.models import Count
     from django.db.models.functions import TruncDate, Lower, Trim
@@ -4656,7 +4656,7 @@ def analytics_service(request: HttpRequest):
 
     # Status by type matrix for stacked chart
     status_order = ["created", "in_progress", "completed", "cancelled"]
-    type_order = ["sales", "service", "consultation"]
+    type_order = ["sales", "service", "inquiry"]
     status_by_app = { (r["type"] or "", r["status"] or ""): r["c"] for r in qs.values("type", "status").annotate(c=Count("id")) }
     status_series = [
         {
@@ -4723,7 +4723,7 @@ def analytics_service(request: HttpRequest):
     }
 
     # Inquiry breakdowns
-    inquiry_qs = qs.filter(type="consultation")
+    inquiry_qs = qs.filter(type="inquiry")
     inquiry_types_qs = inquiry_qs.values("inquiry_type").annotate(c=Count("id")).order_by("-c")
     inquiry_types = {
         "labels": [r["inquiry_type"] or "Other" for r in inquiry_types_qs],
@@ -4733,14 +4733,14 @@ def analytics_service(request: HttpRequest):
     # Types pie
     types_chart = {
         "labels": ["Sales", "Service", "Inquiries"],
-        "values": [by_type.get("sales", 0), by_type.get("service", 0), by_type.get("consultation", 0)],
+        "values": [by_type.get("sales", 0), by_type.get("service", 0), by_type.get("inquiry", 0)],
     }
 
     # KPIs + period-over-period deltas
     total_orders = sum(types_chart["values"]) if types_chart else 0
     total_sales = by_type.get("sales", 0)
     total_service = by_type.get("service", 0)
-    total_inquiries = by_type.get("consultation", 0)
+    total_inquiries = by_type.get("inquiry", 0)
 
     # Previous period (same length right before start_date)
     prev_end = start_date - timezone.timedelta(days=1)
@@ -4757,7 +4757,7 @@ def analytics_service(request: HttpRequest):
         "order_change": pct_change(total_orders, sum(prev_by_type.values()) if prev_by_type else 0),
         "tire_sales_change": pct_change(total_sales, prev_by_type.get("sales", 0)),
         "car_service_change": pct_change(total_service, prev_by_type.get("service", 0)),
-        "inquiry_change": pct_change(total_inquiries, prev_by_type.get("consultation", 0)),
+        "inquiry_change": pct_change(total_inquiries, prev_by_type.get("inquiry", 0)),
     }
 
     charts = {
