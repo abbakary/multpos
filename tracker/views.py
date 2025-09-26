@@ -408,7 +408,7 @@ def dashboard(request: HttpRequest):
     for p in ["today", "yesterday", "last_week", "last_month"]:
         start_d, end_d = _period_range(p)
         rows = (
-            Order.objects.filter(created_at__date__gte=start_d, created_at__date__lte=end_d)
+            orders_qs.filter(created_at__date__gte=start_d, created_at__date__lte=end_d)
             .values("customer__full_name")
             .annotate(c=Count("id"))
             .order_by("-c")[:5]
