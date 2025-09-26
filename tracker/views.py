@@ -213,7 +213,7 @@ def dashboard(request: HttpRequest):
         from django.db.models import Max
 
         top_customers = (
-            Customer.objects.annotate(
+            customers_qs.annotate(
                 order_count=Count("orders"),
                 latest_order_date=Max("orders__created_at")
             )
