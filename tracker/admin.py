@@ -1,11 +1,11 @@
 from django.contrib import admin
-from .models import Customer, Vehicle, Order, InventoryItem
+from .models import Customer, Vehicle, Order, InventoryItem, Branch
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ("code", "full_name", "phone", "customer_type", "total_visits", "last_visit")
+    list_display = ("code", "full_name", "phone", "customer_type", "total_visits", "last_visit", "branch")
     search_fields = ("code", "full_name", "phone", "email")
-    list_filter = ("customer_type", "current_status")
+    list_filter = ("customer_type", "current_status", "branch")
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
@@ -14,9 +14,9 @@ class VehicleAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("order_number", "customer", "type", "status", "priority", "created_at", "started_at", "completed_at", "cancelled_at", "signed_by")
+    list_display = ("order_number", "customer", "type", "status", "priority", "created_at", "started_at", "completed_at", "cancelled_at", "signed_by", "branch")
     search_fields = ("order_number", "customer__full_name")
-    list_filter = ("type", "status", "priority", "signed_by", "completed_at", "cancelled_at")
+    list_filter = ("type", "status", "priority", "signed_by", "completed_at", "cancelled_at", "branch")
     readonly_fields = ("order_number", "created_at", "started_at", "completed_at", "cancelled_at", "signed_at")
 
 
@@ -26,3 +26,9 @@ class InventoryItemAdmin(admin.ModelAdmin):
     search_fields = ("name", "brand")
     list_filter = ("created_at",)
     readonly_fields = ("created_at",)
+
+@admin.register(Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "region", "is_active", "created_at")
+    search_fields = ("name", "code", "region")
+    list_filter = ("region", "is_active")
