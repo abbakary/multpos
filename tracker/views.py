@@ -3680,10 +3680,14 @@ def organization_export(request: HttpRequest):
 @user_passes_test(lambda u: u.is_superuser or u.is_staff)
 def users_list(request: HttpRequest):
     q = request.GET.get('q','').strip()
+    branch_id = (request.GET.get('branch') or '').strip()
     qs = User.objects.all().order_by('-date_joined')
     if q:
         qs = qs.filter(Q(username__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(email__icontains=q))
-    return render(request, 'tracker/users_list.html', { 'users': qs[:100], 'q': q })
+    if branch_id.isdigit():
+        qs = qs.filter(profile__branch_id=int(branch_id))
+    branches = Branch.objects.filter(is_active=True).order_by('name')
+    return render(request, 'tracker/users_list.html', { 'users': qs[:100], 'q': q, 'branches': branches, 'selected_branch': branch_id })
 
 @login_required
 @user_passes_test(lambda u: u.is_superuser)
