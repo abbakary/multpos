@@ -1330,7 +1330,7 @@ def customer_register(request: HttpRequest):
 @login_required
 def start_order(request: HttpRequest):
     """Start a new order by selecting a customer"""
-    customers = Customer.objects.all().order_by('full_name')
+    customers = scope_queryset(Customer.objects.all(), request.user, request).order_by('full_name')
     return render(request, 'tracker/select_customer.html', {
         'customers': customers,
         'page_title': 'Select Customer for New Order'
