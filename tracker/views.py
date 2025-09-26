@@ -488,17 +488,18 @@ def customers_search(request: HttpRequest):
     details = request.GET.get("details")
 
     results = []
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
 
     if customer_id:
         try:
-            customer = Customer.objects.get(id=customer_id)
+            customer = customers_qs.get(id=customer_id)
             results = [customer]
         except Customer.DoesNotExist:
             pass
     elif recent:
-        results = Customer.objects.all().order_by('-last_visit', '-registration_date')[:10]
+        results = customers_qs.order_by('-last_visit', '-registration_date')[:10]
     elif q:
-        results = Customer.objects.filter(
+        results = customers_qs.filter(
             Q(full_name__icontains=q) |
             Q(phone__icontains=q) |
             Q(email__icontains=q) |
