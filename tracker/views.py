@@ -133,9 +133,13 @@ def dashboard(request: HttpRequest):
     # Always calculate fresh metrics for accurate data
     today = timezone.localdate()
     
+    # Branch-scoped base querysets
+    orders_qs = scope_queryset(Order.objects.all(), request.user, request)
+    customers_qs = scope_queryset(Customer.objects.all(), request.user, request)
+
     # Remove caching to ensure fresh data
     metrics = None
-    
+
     if True:  # Always recalculate
         total_orders = Order.objects.count()
         total_customers = Customer.objects.count()
