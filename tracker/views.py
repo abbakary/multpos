@@ -2714,7 +2714,7 @@ def customer_groups_export(request: HttpRequest):
     else:
         start_date = today - timedelta(days=180)
 
-    qs = Customer.objects.annotate(
+    qs = scope_queryset(Customer.objects.all(), request.user, request).annotate(
         recent_orders_count=Count('orders', filter=Q(orders__created_at__date__gte=start_date)),
         last_order_date=Max('orders__created_at'),
         service_orders=Count('orders', filter=Q(orders__type='service', orders__created_at__date__gte=start_date)),
