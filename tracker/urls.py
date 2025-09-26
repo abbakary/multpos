@@ -5,6 +5,7 @@ from django.contrib.auth.views import LogoutView
 from . import views
 from .views import CustomLoginView, CustomLogoutView
 from .views_api_fix import api_customer_groups_data_fixed
+from . import branch_metrics as views_branch
 
 app_name = "tracker"
 
@@ -102,6 +103,7 @@ urlpatterns = [
     path("profile/", views.profile, name="profile"),
 
     path("api/orders/recent/", views.api_recent_orders, name="api_recent_orders"),
+    path("api/branch-metrics/", views_branch.api_branch_metrics, name="api_branch_metrics"),
     path("api/inventory/items/", views.api_inventory_items, name="api_inventory_items"),
     path("api/inventory/brands/", views.api_inventory_brands, name="api_inventory_brands"),
     path("api/inventory/stock/", views.api_inventory_stock, name="api_inventory_stock"),
