@@ -176,7 +176,7 @@ def dashboard(request: HttpRequest):
         today_date = timezone.localdate()
         
         # Count completed orders by completed_at date (if set) or created_at date
-        completed_today_count = Order.objects.filter(
+        completed_today_count = orders_qs.filter(
             status="completed"
         ).extra(
             where=[
