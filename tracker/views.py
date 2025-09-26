@@ -154,7 +154,7 @@ def dashboard(request: HttpRequest):
 
         # Count persisted overdue
         try:
-            overdue_count = Order.objects.filter(status="overdue").count()
+            overdue_count = orders_qs.filter(status="overdue").count()
             status_counts["overdue"] = overdue_count
         except Exception:
             status_counts.setdefault("overdue", 0)
