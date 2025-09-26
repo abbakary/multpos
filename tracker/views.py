@@ -2532,7 +2532,7 @@ def reports(request: HttpRequest):
             start = today - timedelta(days=29)
             f_from = f_from or start.isoformat()
             f_to = f_to or today.isoformat()
-    qs = Order.objects.select_related("customer").order_by("-created_at")
+    qs = scope_queryset(Order.objects.select_related("customer").order_by("-created_at"), request.user, request)
     if f_from:
         try:
             from datetime import datetime
@@ -2639,7 +2639,7 @@ def reports_export(request: HttpRequest):
     f_from = request.GET.get("from")
     f_to = request.GET.get("to")
     f_type = request.GET.get("type", "all")
-    qs = Order.objects.select_related("customer").order_by("-created_at")
+    qs = scope_queryset(Order.objects.select_related("customer").order_by("-created_at"), request.user, request)
     if f_from:
         try:
             qs = qs.filter(created_at__date__gte=f_from)
