@@ -141,12 +141,12 @@ def dashboard(request: HttpRequest):
     metrics = None
 
     if True:  # Always recalculate
-        total_orders = Order.objects.count()
-        total_customers = Customer.objects.count()
+        total_orders = orders_qs.count()
+        total_customers = customers_qs.count()
 
-        status_counts_qs = Order.objects.values("status").annotate(c=Count("id"))
-        type_counts_qs = Order.objects.values("type").annotate(c=Count("id"))
-        priority_counts_qs = Order.objects.values("priority").annotate(c=Count("id"))
+        status_counts_qs = orders_qs.values("status").annotate(c=Count("id"))
+        type_counts_qs = orders_qs.values("type").annotate(c=Count("id"))
+        priority_counts_qs = orders_qs.values("priority").annotate(c=Count("id"))
 
         status_counts = {x["status"]: x["c"] for x in status_counts_qs}
         type_counts = {x["type"]: x["c"] for x in type_counts_qs}
