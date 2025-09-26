@@ -464,9 +464,9 @@ def customers_list(request: HttpRequest):
     # Stats - fix calculations with current date
     from datetime import date
     today_date = date.today()
-    active_customers = Customer.objects.filter(arrival_time__date=today_date).count()
-    new_customers_today = Customer.objects.filter(registration_date__date=today_date).count()
-    returning_customers = Customer.objects.filter(total_visits__gt=1).count()
+    active_customers = customers_qs.filter(arrival_time__date=today_date).count()
+    new_customers_today = customers_qs.filter(registration_date__date=today_date).count()
+    returning_customers = customers_qs.filter(total_visits__gt=1).count()
 
     paginator = Paginator(qs, 20)
     page = request.GET.get('page')
